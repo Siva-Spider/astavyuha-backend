@@ -38,14 +38,6 @@ CORS(app,
      allow_headers=["Content-Type", "Authorization"],
      methods=["GET", "POST", "OPTIONS", "PUT", "DELETE"])
 
-@app.after_request
-def after_request(response):
-    response.headers.add("Access-Control-Allow-Origin", "https://siva-spider-autotrade.netlify.app")
-    response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
-    response.headers.add("Access-Control-Allow-Methods", "GET,POST,OPTIONS,PUT,DELETE")
-    return response
-
-
 @app.route("/")
 def home():
     return {"status": "Backend is running 🚀"}
