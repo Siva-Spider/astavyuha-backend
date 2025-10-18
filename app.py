@@ -418,13 +418,13 @@ def get_admin_users():
 
 
 # 2. Approve pending user
-@app.route("/api/admin/approve/<username>", methods=["POST"])
-def approve_user(username):
+@app.route("/api/admin/approve/<userId>", methods=["POST"])
+def approve_user(userId):
     from email_utils import send_email
 
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM pending_users WHERE username = ?", (username,))
+    cursor.execute("SELECT * FROM pending_users WHERE userId = ?", (userId,))
     user = cursor.fetchone()
     if not user:
         conn.close()
@@ -434,7 +434,7 @@ def approve_user(username):
             INSERT INTO users ( userId, username, email, password, role, mobilenumber)
             VALUES (?, ?, ?, ?, ?,?)
         """, (user[1], user[2], user[3], user[4], user[5], user[6]))
-    cursor.execute("DELETE FROM pending_users WHERE username = ?", (username,))
+    cursor.execute("DELETE FROM pending_users WHERE userId = ?", (userId,))
     conn.commit()
     conn.close()
 
