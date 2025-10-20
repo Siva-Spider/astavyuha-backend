@@ -1,5 +1,5 @@
 import gevent
-from gevent import monkey
+from gevent import monkey, spawn
 monkey.patch_all()
 
 from flask import Flask, request, jsonify, Response,  send_from_directory
@@ -1050,13 +1050,8 @@ def start_all_trading():
     trading_parameters = data.get("tradingParameters", [])
     selected_brokers = data.get("selectedBrokers", [])
 
-    # Run in background thread
-    thread = threading.Thread(
-        target=run_trading_logic_for_all,
-        args=(trading_parameters, selected_brokers, logger),
-        daemon=True
-    )
-    thread.start()
+    # Use gevent.spawn instead of threading.Thread
+    spawn(run_trading_logic_for_all, trading_parameters, selected_brokers, logger)
 
     return jsonify({"logs": ["🟢 Started trading for all stocks together"]})
 
