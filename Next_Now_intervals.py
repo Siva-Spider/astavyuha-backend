@@ -1,4 +1,5 @@
 import datetime
+from zoneinfo import ZoneInfo
 
 def round_to_next_interval(interval_minutes):
     if not str(interval_minutes).strip():
@@ -6,8 +7,8 @@ def round_to_next_interval(interval_minutes):
     else:
         interval_minutes = int(interval_minutes)
 
-    now = datetime.datetime.now()
-    base = datetime.datetime.combine(now.date(), datetime.time(0, 15))
+    now = datetime.datetime.now(ZoneInfo("Asia/Kolkata"))
+     base = datetime.datetime.combine(now.date(), datetime.time(0, 15, tzinfo=ZoneInfo("Asia/Kolkata")))
     elapsed = (now - base).total_seconds()
 
     if elapsed < 0:
