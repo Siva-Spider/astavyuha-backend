@@ -29,8 +29,10 @@ def lot_size(name):
 
     if not filtered.empty:
         lot_size = filtered.iloc[0]['lot_size']
+        tick_size = filtered.iloc[0]['tick_size']
         print(lot_size)
-        return lot_size
+        print(tick_size)
+        return lot_size, tick_size
     else:
         print("❌ No matching option instrument found")
         return
@@ -95,6 +97,9 @@ def commodity_lot_size(name, symbol):
 
     # Return lot size from latest expiry
     lot_size = latest_row['lot_size']
-    return lot_size
+    tick_size = latest_row['tick_size']
+    print(lot_size)
+    print(tick_size)
+    return lot_size, tick_size
 
 

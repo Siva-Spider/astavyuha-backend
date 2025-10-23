@@ -2,7 +2,7 @@
 import pandas as pd
 import numpy as np
 
-def all_indicators(df):
+def all_indicators(df,strategy):
     df = df.copy()
     tf =df.copy()
 
@@ -93,4 +93,24 @@ def all_indicators(df):
 
     df.dropna(inplace=True)
     df = df.round(2)
-    return df
+    base_cols = ['datetime', 'open', 'high', 'low', 'close']
+    indicator_cols = []
+
+    if strategy == "ADX_MACD_WillR_Supertrend":
+        indicator_cols = ['Supertrend', 'MACD', 'MACD_signal', 'ADX', 'WillR_14', 'ema10', 'ema20']
+    elif strategy == "Ema10_Ema20_Supertrend":
+        indicator_cols = ['ema10', 'ema20', 'Supertrend']
+    elif strategy == "Ema10_Ema20_MACD_Supertrend":
+        indicator_cols = ['ema10', 'ema20', 'MACD', 'MACD_signal', 'Supertrend']
+    else:
+        # default: return all computed indicators plus base columns
+        indicator_cols = ['Supertrend', 'MACD', 'MACD_signal', 'MACD_hist', 'ADX', 'WillR_14', 'ema10', 'ema20']
+
+        # ensure requested columns exist
+    out_cols = [c for c in base_cols if c in df.columns] + [c for c in indicator_cols if c in df.columns]
+    result = df.loc[:, out_cols].copy()
+
+    # Round to 2 decimals for presentation (optional)
+    # result = result.round(2)
+
+    return result
