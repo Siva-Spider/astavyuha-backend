@@ -1,7 +1,3 @@
-# app.py
-# Fixed single-file backend: duplicates removed (get_latest_instruments, stream_logs)
-# Leader-lock + lock-renewer + memory logging + safe spawn wrapper included.
-
 import os
 import json
 import time
@@ -12,21 +8,11 @@ import datetime
 import random
 import sqlite3
 import smtplib
-import tempfile
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
 from flask import Flask, request, jsonify, Response, send_from_directory
 from flask_cors import CORS
-
-# gevent and monkey patching
-import gevent
-from gevent import monkey, spawn
-from logger_util import push_log, get_log_buffer, attach_broadcast_to_root
-import builtins
-import threading
-import importlib
-monkey.patch_all()
 
 # ====== Broker libs and project modules (keep as in your original) ======
 import Upstox as us
@@ -50,8 +36,6 @@ from collections import deque
 
 app = Flask(__name__)
 CORS(app)
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("autotrade")
 
 # ---------------- App globals (taken from original) ----------------
 broker_map = {
@@ -207,237 +191,43 @@ def save_logged_in_users(users):
     with open(LOGGED_IN_JSON, "w") as f:
         json.dump(users, f)
 
-# ----------------- Leader-lock + memory-hardening patch -----------------
-try:
-    import redis
-    _redis = redis.from_url(os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0"))
-except Exception:
-    _redis = None
-
-LOCK_KEY = os.environ.get("AUTOTRADE_LOCK_KEY", "autotrade:leader")
-LOCK_TTL = int(os.environ.get("AUTOTRADE_LOCK_TTL", "30"))  # seconds
-
-# Paste this into your app.py replacing the current _acquire_lock and _renew_lock_loop
-
-LOCK_FILE = os.environ.get("AUTOTRADE_LOCK_FILE", os.path.join(tempfile.gettempdir(), "autotrade_leader.lock"))
-
-def _is_pid_running(pid):
-    """Return True if a process with PID exists on this host (posix & windows-safe attempt)."""
-    try:
-        pid = int(pid)
-    except Exception:
-        return False
-    if pid <= 0:
-        return False
-    try:
-        # POSIX: signal 0 check; Windows: still works for existence in many Python builds
-        os.kill(pid, 0)
-    except PermissionError:
-        # Process exists but we don't have permission — treat as running
-        return True
-    except OSError:
-        return False
-    except Exception:
-        return False
-    return True
-
-def _acquire_lock():
-    """
-    Try to acquire the Redis leader lock. If Redis is unavailable, fall back to a file lock.
-    Returns True if this process becomes leader.
-    """
-    # --- Try Redis first (if configured) ---
-    if _redis:
-        try:
-            acquired = _redis.set(LOCK_KEY, str(os.getpid()), nx=True, ex=LOCK_TTL)
-            if acquired:
-                logger.info("Acquired leader lock in Redis (pid=%s)", os.getpid())
-                return True
-
-            owner = _redis.get(LOCK_KEY)
-            if owner:
-                owner = owner.decode() if isinstance(owner, bytes) else str(owner)
-                try:
-                    owner_pid = int(owner)
-                except Exception:
-                    # invalid owner value — try delete and claim
-                    try:
-                        _redis.delete(LOCK_KEY)
-                    except Exception:
-                        pass
-                    time.sleep(0.05)
-                    return bool(_redis.set(LOCK_KEY, str(os.getpid()), nx=True, ex=LOCK_TTL))
-                # if owner pid not running on this host, attempt takeover
-                if not _is_pid_running(owner_pid):
-                    logger.warning("Redis lock owner pid=%s not running. Attempting takeover.", owner_pid)
-                    try:
-                        lua = """
-                        if redis.call("get", KEYS[1]) == ARGV[1] then
-                            return redis.call("del", KEYS[1])
-                        else
-                            return 0
-                        end
-                        """
-                        _redis.eval(lua, 1, LOCK_KEY, str(owner_pid))
-                    except Exception:
-                        try:
-                            _redis.delete(LOCK_KEY)
-                        except Exception:
-                            pass
-                    time.sleep(0.05)
-                    return bool(_redis.set(LOCK_KEY, str(os.getpid()), nx=True, ex=LOCK_TTL))
-                # owner is alive -> cannot acquire
-                return False
-            else:
-                # no owner key; try again
-                return bool(_redis.set(LOCK_KEY, str(os.getpid()), nx=True, ex=LOCK_TTL))
-        except Exception:
-            # Redis connection error; fall through to file-lock fallback
-            logger.warning("Redis unavailable; falling back to file-lock. Error: %s", traceback.format_exc())
-
-    # --- File-lock fallback (single-host) ---
-    try:
-        # Attempt to create lock file atomically using os.O_EXCL
-        flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
-        # On Windows, O_EXCL semantics vary, but this works in most cases.
-        fd = os.open(LOCK_FILE, flags)
-        try:
-            os.write(fd, str(os.getpid()).encode())
-            os.close(fd)
-            logger.info("Acquired leader lock with file %s (pid=%s)", LOCK_FILE, os.getpid())
-            return True
-        except Exception:
-            try:
-                os.close(fd)
-            except Exception:
-                pass
-            raise
-
-    except FileExistsError:
-        # Lock file exists — check owner pid
-        try:
-            with open(LOCK_FILE, "r") as f:
-                content = f.read().strip()
-        except Exception:
-            content = None
-
-        try:
-            owner_pid = int(content) if content else None
-        except Exception:
-            owner_pid = None
-
-        # If owner PID is not running, remove stale lock and try to claim
-        if owner_pid is None or not _is_pid_running(owner_pid):
-            logger.warning("Stale file lock detected (owner=%s). Taking over.", owner_pid)
-            try:
-                os.remove(LOCK_FILE)
-            except Exception:
-                pass
-            # try once more to create
-            try:
-                fd = os.open(LOCK_FILE, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                os.write(fd, str(os.getpid()).encode())
-                os.close(fd)
-                logger.info("Acquired leader lock with file after takeover %s (pid=%s)", LOCK_FILE, os.getpid())
-                return True
-            except Exception:
-                return False
-        else:
-            # Owner alive -> cannot acquire
-            return False
-    except Exception as e:
-        logger.exception("Unexpected file-lock acquire error: %s", e)
-        return False
-
-def _renew_lock_loop():
-    """
-    Renew Redis TTL if using Redis, otherwise update lock file timestamp occasionally.
-    If lock is lost, stop renewing.
-    """
-    try:
-        while True:
-            if _redis:
-                try:
-                    val = _redis.get(LOCK_KEY)
-                    if val and val.decode() == str(os.getpid()):
-                        _redis.expire(LOCK_KEY, LOCK_TTL)
-                    else:
-                        break
-                except Exception:
-                    logger.debug("Error renewing redis lock: %s", traceback.format_exc())
-            else:
-                # Touch the lock file to update modified time (best-effort)
-                try:
-                    if os.path.exists(LOCK_FILE):
-                        with open(LOCK_FILE, "w") as f:
-                            f.write(str(os.getpid()))
-                    else:
-                        # lock file disappeared — stop renewing
-                        break
-                except Exception:
-                    logger.debug("Error touching lock file: %s", traceback.format_exc())
-            gevent.sleep(max(1, LOCK_TTL / 2))
-    except Exception:
-        logger.exception("Lock renew loop fatal: %s", traceback.format_exc())
-
-
-def _log_memory(stage=""):
-    try:
-        import psutil
-        proc = psutil.Process()
-        rss_mb = proc.memory_info().rss / 1024 / 1024
-        logger.info("[MEM] pid=%s stage=%s RSS=%.1fMB", os.getpid(), stage, rss_mb)
-    except Exception:
-        pass
-
-def _safe_run_trading_loop(run_func, *args, **kwargs):
-    """
-    Acquire leader lock, spawn renewer, run the user's loop, release lock and GC.
-    """
-    if not _acquire_lock():
-        logger.info("Not leader (pid=%s). Skipping trading loop in this worker.", os.getpid())
-        return
-
-    logger.info("Leader lock acquired by pid %s", os.getpid())
-    spawn(_renew_lock_loop)
-
-    try:
-        try:
-            run_func(*args, **kwargs)
-        except Exception as e:
-            logger.exception("Top-level trading loop exception: %s", e)
-            gevent.sleep(5)
-    finally:
-        logger.info("Leader exiting, releasing lock (pid %s)", os.getpid())
-        try:
-            if _redis:
-                cur = _redis.get(LOCK_KEY)
-                if cur and cur.decode() == str(os.getpid()):
-                    _redis.delete(LOCK_KEY)
-        except Exception:
-            logger.exception("Failed to delete lock on exit: %s", traceback.format_exc())
-        gc.collect()
-        _log_memory("leader_exit")
-
 # ---------- START: in-memory log & SSE helpers ----------
 
 # Circular buffer for recent log messages and payloads
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger("autotrade")
+
 _LOG_MAX = int(os.environ.get("AUTOTRADE_LOG_BUFFER", 500))
 _log_buf = deque(maxlen=_LOG_MAX)
 _log_lock = threading.Lock()
 
-def push_payload(name: str, data):
-    """
-    Send structured payloads (like candle/indicator JSONs) to the buffer.
-    `data` must be JSON-serializable (or convertible).
-    """
-    try:
-        ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        payload = {"type": "payload", "ts": ts, "name": name, "data": data}
-        with _log_lock:
-            _log_buf.append(payload)
-    except Exception as e:
-        logger.exception("push_payload failed: %s", e)
+def push_log(message, level="info"):
+    """Add a log message to the in-memory buffer and Python logger."""
+    ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    entry = {"type": "log", "ts": ts, "message": str(message), "level": level}
+
+    with _log_lock:
+        _log_buf.append(entry)
+
+    if level.lower() == "error":
+        logger.error(message)
+    elif level.lower() == "warning":
+        logger.warning(message)
+    else:
+        logger.info(message)
+
+def push_payload(name, data):
+    """Push structured payloads (e.g. JSON or trade info) into the buffer."""
+    ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    entry = {"type": "payload", "ts": ts, "name": name, "data": data}
+    with _log_lock:
+        _log_buf.append(entry)
+
+def get_log_buffer():
+    """Return all buffered logs (for SSE endpoint)."""
+    with _log_lock:
+        return list(_log_buf)
 
 # ----------------- instrument endpoint (kept single copy) ----------------
 @app.route('/api/instruments/latest', methods=['GET'])
@@ -1028,7 +818,7 @@ def stream_logs():
                     yield f"event: {event_name}\ndata: {data_str}\n\n"
 
                 # sleep briefly, then loop
-                gevent.sleep(0.5)
+                time.sleep(0.5)
 
                 # If buffers shrank (rotation/trim), prune seen to last N items to avoid memory growth
                 try:
@@ -1050,7 +840,7 @@ def stream_logs():
                     push_log("Stream-logs encountered an error; continuing.", "error")
                 except Exception:
                     pass
-                gevent.sleep(1)
+                time.sleep(1)
         # normal generator end
     return Response(event_stream(), mimetype="text/event-stream")
 
@@ -1234,7 +1024,7 @@ def run_trading_logic_for_all(trading_parameters, selected_brokers, logger):
 
                 msg = f"✅ Data ready for {symbol}"
                 push_log(msg)
-                gevent.sleep(0.5)
+                time.sleep(0.5)
                 indicators_df = ind.all_indicators(combined_df,strategy)
                 row = indicators_df.tail(1).iloc[0]
                 cols = indicators_df.columns.tolist()
@@ -1291,14 +1081,14 @@ def run_trading_logic_for_all(trading_parameters, selected_brokers, logger):
                 except Exception:
                     pass
                 gc.collect()
-                gevent.sleep(0)
+                time.sleep(0)
 
             push_log("✅ Trading cycle complete")
 
             msg = f"Present Interval Start : {now_interval}, Next Interval Start :{next_interval}"
             push_log(msg)
             push_log("Waiting for next interval beginning .....")
-            gevent.sleep(1)
+            time.sleep(1)
 
     push_log("All active trades ended. Exiting trading loop.")
     gc.collect()
@@ -1310,12 +1100,17 @@ def start_all_trading():
     data = request.get_json()
     trading_parameters = data.get("tradingParameters", [])
     selected_brokers = data.get("selectedBrokers", [])
-    print(trading_parameters)
 
-    # Use the leader-wrapper so only one worker runs the heavy loop
-    spawn(_safe_run_trading_loop, run_trading_logic_for_all, trading_parameters, selected_brokers, logger)
+    # Run in background thread
+    thread = threading.Thread(
+        target=run_trading_logic_for_all,
+        args=(trading_parameters, selected_brokers, logger),
+        daemon=True
+    )
+    thread.start()
 
-    return jsonify({"logs": ["🟢 Started trading for all stocks together. \n Waiting for the next interval....."]}), 202
+    return jsonify({"logs": ["🟢 Started trading for all stocks together"]})
+
 
 # ----------------- Close position endpoints (original) ----------------
 @app.route("/api/close-position", methods=["POST"])
