@@ -1,90 +1,67 @@
-# logger_util.py
-import datetime
+# common_logger.py
 import logging
-import threading
 import os
+import datetime
+import threading
+from collections import deque
 
-_log_buf = []
+# ==========================================================
+# 🌐 Global Autotrade Logger Configuration
+# ==========================================================
+
+# Set up base logging config
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
+# Global logger instance for the entire app
+logger = logging.getLogger("autotrade")
+if not logger.hasHandlers():
+    file_handler = logging.FileHandler("/tmp/autotrade.log")
+    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
+
+# ==========================================================
+# 🧠 In-Memory Log Buffer (for UI / SSE / APIs)
+# ==========================================================
+
+_LOG_MAX = int(os.environ.get("AUTOTRADE_LOG_BUFFER", 500))
+_log_buf = deque(maxlen=_LOG_MAX)
 _log_lock = threading.Lock()
 
-LOGGER_NAME = "AutoTrader"
-logger = logging.getLogger(LOGGER_NAME)
-logger.setLevel(logging.INFO)
+def push_log(message, level="info"):
+    """Add a log message to the in-memory buffer and standard logger."""
+    ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    entry = {"type": "log", "ts": ts, "message": str(message), "level": level}
 
-# add a single StreamHandler for terminal output if none present
-if not logger.handlers:
-    ch = logging.StreamHandler()
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-    ch.setFormatter(formatter)
-    logger.addHandler(ch)
+    with _log_lock:
+        _log_buf.append(entry)
 
-# Do NOT propagate to root (prevents duplication)
-logger.propagate = False
+    # Write to actual Python logger
+    level = level.lower()
+    if level == "error":
+        logger.error(message)
+    elif level == "warning":
+        logger.warning(message)
+    else:
+        logger.info(message)
 
-def push_log(msg: str, level: str = "info"):
-    """
-    Add message to buffer and write to the module logger (terminal).
-    msg should be an already formatted string if you want consistent appearance.
-    """
-    try:
-        ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        payload = {"type": "log", "ts": ts, "level": level, "message": str(msg)}
-        with _log_lock:
-            _log_buf.append(payload)
-    except Exception:
-        pass
-
-    try:
-        if level == "info":
-            logger.info(msg)
-        elif level == "warning":
-            logger.warning(msg)
-        elif level == "error":
-            logger.error(msg)
-        else:
-            logger.debug(msg)
-    except Exception:
-        # best effort
-        print(msg)
+def push_payload(name, data):
+    """Push structured payloads (e.g., trade data, metrics) into the buffer."""
+    ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    entry = {"type": "payload", "ts": ts, "name": name, "data": data}
+    with _log_lock:
+        _log_buf.append(entry)
 
 def get_log_buffer():
+    """Return all buffered logs (used for frontend streaming or debugging)."""
     with _log_lock:
         return list(_log_buf)
 
-# ------- BroadcastHandler: attach this to root logger to forward records to buffer -------
-class BroadcastHandler(logging.Handler):
-    """
-    Logging handler that formats records and forwards the formatted string to push_log().
-    Attach this once to the root logger so all logging (any module) is forwarded.
-    """
-    def __init__(self, fmt=None, level=logging.NOTSET):
-        super().__init__(level)
-        if fmt is None:
-            fmt = "%(asctime)s - %(levelname)s - %(message)s"
-        self.formatter = logging.Formatter(fmt)
-
-    def emit(self, record: logging.LogRecord):
-        try:
-            formatted = self.format(record)
-            levelname = record.levelname.lower()
-            push_log(formatted, levelname)
-        except Exception:
-            # never raise from handler
-            try:
-                print("BroadcastHandler emit failure:", record)
-            except Exception:
-                pass
-
-def attach_broadcast_to_root():
-    """
-    Call this once during app startup (from app.py) to attach the BroadcastHandler
-    to the root logger. If already attached, do nothing.
-    """
-    root = logging.getLogger()
-    # avoid duplicates: check for existing instance
-    for h in root.handlers:
-        if isinstance(h, BroadcastHandler):
-            return
-    broadcast = BroadcastHandler(fmt="%(asctime)s - %(levelname)s - %(message)s")
-    broadcast.setLevel(logging.INFO)
-    root.addHandler(broadcast)
+# ==========================================================
+# ✅ Exports
+# ==========================================================
+__all__ = ["logger", "push_log", "push_payload", "get_log_buffer"]
