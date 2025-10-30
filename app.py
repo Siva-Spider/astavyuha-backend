@@ -1,7 +1,3 @@
-# app.py
-# Fixed single-file backend: duplicates removed (get_latest_instruments, stream_logs)
-# Leader-lock + lock-renewer + memory logging + safe spawn wrapper included.
-
 import os
 import json
 import time
@@ -221,7 +217,6 @@ def send_email(to_email, subject, body):
 def connect_broker():
     import Upstox as us
     import Zerodha as zr
-    import AngelOne as ar
     import Groww as gr
     import Fivepaisa as fp
 
@@ -262,6 +257,7 @@ def connect_broker():
                     message = "Connection failed. Check your API key and access token."
 
             elif broker_name == "AngelOne":
+                import AngelOne as ar
                 api_key = creds.get('api_key')
                 user_id = creds.get('user_id')
                 pin = creds.get('pin')
