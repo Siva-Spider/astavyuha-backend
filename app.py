@@ -10,18 +10,11 @@ import sqlite3
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-
 from flask import Flask, request, jsonify, Response, send_from_directory
 from flask_cors import CORS
 
 # ====== Broker libs and project modules (keep as in your original) ======
-import Upstox as us
-import Zerodha as zr
-import AngelOne as ar
-import Groww as gr
-import Fivepaisa as fp
 from logger_module import logger
-
 import get_lot_size as ls
 from upstox_instrument_manager import LATEST_LINK_FILENAME, DATA_DIR, update_instrument_file
 import Next_Now_intervals as nni
@@ -260,6 +253,12 @@ def send_email(to_email, subject, body):
 # ----------------- Broker connect endpoint (kept original) ----------------
 @app.route('/api/connect-broker', methods=['POST'])
 def connect_broker():
+    import Upstox as us
+    import Zerodha as zr
+    import AngelOne as ar
+    import Groww as gr
+    import Fivepaisa as fp
+    
     data = request.get_json()
     brokers_data = data.get('brokers', [])
     responses = []
@@ -387,6 +386,12 @@ def get_lot_size():
 
 # ----------------- Find positions helper (original) ----------------
 def find_positions_for_symbol(broker, symbol, credentials):
+    import Upstox as us
+    import Zerodha as zr
+    import AngelOne as ar
+    import Groww as gr
+    import Fivepaisa as fp
+    
     positions = []
     try:
         if broker.lower() == "upstox":
@@ -408,7 +413,7 @@ def find_positions_for_symbol(broker, symbol, credentials):
             if not session:
                 return []
             auth_token = session["auth_token"]
-            positions = ar.angeeone_fetch_positions(api_key, auth_token)
+            positions = ar.angeleone_fetch_positions(api_key, auth_token)
         elif broker.lower() == "5paisa":
             app_key = credentials.get('app_key')
             access_token = credentials.get('access_token')
@@ -846,6 +851,8 @@ def stream_logs():
 
 @app.route('/api/get_profit_loss', methods=['POST'])
 def get_profit_loss():
+    import Upstox as us
+    
     data = request.get_json()
     access_token = data.get("access_token")
     segment = data.get("segment")
@@ -872,6 +879,12 @@ def get_profit_loss():
 
 # === TRADING LOOP FOR ALL STOCKS ===
 def run_trading_logic_for_all(trading_parameters, selected_brokers, logger):
+    import Upstox as us
+    import Zerodha as zr
+    import AngelOne as ar
+    import Groww as gr
+    import Fivepaisa as fp
+    
     print(trading_parameters)
     for stock in trading_parameters:
         active_trades[stock['symbol_value']] = True
@@ -1041,6 +1054,7 @@ def run_trading_logic_for_all(trading_parameters, selected_brokers, logger):
                 push_log(line())
                 push_log(values)
                 push_log(line())
+                push_log(line())
                 #push_log(tabulate(indicators_df.tail(1), headers="keys", tablefmt="pretty", showindex=False))
 
                 # STEP 3: Check trade conditions
@@ -1115,6 +1129,12 @@ def start_all_trading():
 # ----------------- Close position endpoints (original) ----------------
 @app.route("/api/close-position", methods=["POST"])
 def close_position():
+    import Upstox as us
+    import Zerodha as zr
+    import AngelOne as ar
+    import Groww as gr
+    import Fivepaisa as fp
+    
     data = request.json
     symbol = data.get("symbol_value")
     broker = data.get("broker")
@@ -1146,6 +1166,12 @@ def close_position():
 
 @app.route("/api/close-all-positions", methods=["POST"])
 def close_all_positions():
+    import Upstox as us
+    import Zerodha as zr
+    import AngelOne as ar
+    import Groww as gr
+    import Fivepaisa as fp
+    
     data = request.json
     trading_parameters = data.get("tradingParameters", [])
     selected_brokers = data.get("selectedBrokers", [])
