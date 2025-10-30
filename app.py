@@ -1,3 +1,7 @@
+# app.py
+# Fixed single-file backend: duplicates removed (get_latest_instruments, stream_logs)
+# Leader-lock + lock-renewer + memory logging + safe spawn wrapper included.
+
 import os
 import json
 import time
@@ -14,7 +18,7 @@ from flask import Flask, request, jsonify, Response, send_from_directory
 from flask_cors import CORS
 
 # ====== Broker libs and project modules (keep as in your original) ======
-from logger_module import logger
+from logger_util import logger, push_log, push_payload, get_log_buffer
 import get_lot_size as ls
 from upstox_instrument_manager import LATEST_LINK_FILENAME, DATA_DIR, update_instrument_file
 import Next_Now_intervals as nni
@@ -184,44 +188,6 @@ def save_logged_in_users(users):
     with open(LOGGED_IN_JSON, "w") as f:
         json.dump(users, f)
 
-# ---------- START: in-memory log & SSE helpers ----------
-
-# Circular buffer for recent log messages and payloads
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger("autotrade")
-
-_LOG_MAX = int(os.environ.get("AUTOTRADE_LOG_BUFFER", 500))
-_log_buf = deque(maxlen=_LOG_MAX)
-_log_lock = threading.Lock()
-
-def push_log(message, level="info"):
-    """Add a log message to the in-memory buffer and Python logger."""
-    ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    entry = {"type": "log", "ts": ts, "message": str(message), "level": level}
-
-    with _log_lock:
-        _log_buf.append(entry)
-
-    if level.lower() == "error":
-        logger.error(message)
-    elif level.lower() == "warning":
-        logger.warning(message)
-    else:
-        logger.info(message)
-
-def push_payload(name, data):
-    """Push structured payloads (e.g. JSON or trade info) into the buffer."""
-    ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    entry = {"type": "payload", "ts": ts, "name": name, "data": data}
-    with _log_lock:
-        _log_buf.append(entry)
-
-def get_log_buffer():
-    """Return all buffered logs (for SSE endpoint)."""
-    with _log_lock:
-        return list(_log_buf)
-
 # ----------------- instrument endpoint (kept single copy) ----------------
 @app.route('/api/instruments/latest', methods=['GET'])
 def get_latest_instruments():
@@ -258,7 +224,7 @@ def connect_broker():
     import AngelOne as ar
     import Groww as gr
     import Fivepaisa as fp
-    
+
     data = request.get_json()
     brokers_data = data.get('brokers', [])
     responses = []
@@ -391,7 +357,7 @@ def find_positions_for_symbol(broker, symbol, credentials):
     import AngelOne as ar
     import Groww as gr
     import Fivepaisa as fp
-    
+
     positions = []
     try:
         if broker.lower() == "upstox":
@@ -787,6 +753,9 @@ def delete_rejected_user(userId):
 # ----------------- stream logs endpoint (single copy) ----------------
 @app.route("/api/stream-logs")
 def stream_logs():
+    _LOG_MAX = int(os.environ.get("AUTOTRADE_LOG_BUFFER", 500))
+    _log_buf = deque(maxlen=_LOG_MAX)
+    _log_lock = threading.Lock()
     def event_stream():
         seen = set()
         # loop forever, sending new unique messages from either buffer
@@ -852,7 +821,7 @@ def stream_logs():
 @app.route('/api/get_profit_loss', methods=['POST'])
 def get_profit_loss():
     import Upstox as us
-    
+
     data = request.get_json()
     access_token = data.get("access_token")
     segment = data.get("segment")
@@ -884,7 +853,7 @@ def run_trading_logic_for_all(trading_parameters, selected_brokers, logger):
     import AngelOne as ar
     import Groww as gr
     import Fivepaisa as fp
-    
+
     print(trading_parameters)
     for stock in trading_parameters:
         active_trades[stock['symbol_value']] = True
@@ -1134,7 +1103,7 @@ def close_position():
     import AngelOne as ar
     import Groww as gr
     import Fivepaisa as fp
-    
+
     data = request.json
     symbol = data.get("symbol_value")
     broker = data.get("broker")
@@ -1171,7 +1140,7 @@ def close_all_positions():
     import AngelOne as ar
     import Groww as gr
     import Fivepaisa as fp
-    
+
     data = request.json
     trading_parameters = data.get("tradingParameters", [])
     selected_brokers = data.get("selectedBrokers", [])
