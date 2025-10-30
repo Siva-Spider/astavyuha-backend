@@ -1,14 +1,11 @@
 import datetime
 from collections import deque
-from time import sleep
-import ta
+
 import pandas as pd
 import pyotp
 from SmartApi import SmartConnect
-from SmartApi.smartWebSocketV2 import SmartWebSocketV2
-from logzero import logger
-from tabulate import tabulate
-from logger_module import logger
+
+from logger_util import logger, push_log, push_payload, get_log_buffer
 import pytz
 import requests
 import sys
@@ -78,7 +75,7 @@ def angelone_get_token_by_name(name):
 def angelone_get_nearest_option_details(api_key,auth_token, smart_api,name, spot_price, option_type, lots, tgt):
 
     # Index list
-    print(spot_price, name)
+    logger.info(spot_price, name)
     index_list = ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY"]
     url = "https://margincalculator.angelone.in/OpenAPI_File/files/OpenAPIScripMaster.json"
     df = pd.read_json(url)
@@ -102,7 +99,7 @@ def angelone_get_nearest_option_details(api_key,auth_token, smart_api,name, spot
     df = df[df['instrumenttype'] == ("OPTIDX" if name in index_list else "OPTSTK")]
 
     if df.empty:
-        logger.write(f"❌ No instruments found for {name}")
+        logger.error(f"❌ No instruments found for {name}")
         return None
 
     # Expiry filter
@@ -110,7 +107,7 @@ def angelone_get_nearest_option_details(api_key,auth_token, smart_api,name, spot
     df = df[df['expiry'] >= today].sort_values("expiry")
 
     if df.empty:
-        logger.write(f"❌ No future expiry available for {name}")
+        logger.error(f"❌ No future expiry available for {name}")
         return None
 
     nearest_expiry = df['expiry'].iloc[0]
@@ -125,7 +122,7 @@ def angelone_get_nearest_option_details(api_key,auth_token, smart_api,name, spot
     df = df[df['symbol'].str.endswith(option_type)]
 
     if df.empty:
-        logger.write(f"❌ No {option_type} option found for {name} at spot {spot_price}")
+        logger.error(f"❌ No {option_type} option found for {name} at spot {spot_price}")
         return None
 
     nearest_option = df.iloc[0].to_dict()
@@ -144,7 +141,7 @@ def angelone_get_nearest_option_details(api_key,auth_token, smart_api,name, spot
     option_intraday_data = angelone_get_historical_data(api_key,auth_token, smart_api,"NFO", symboltoken, "ONE_MINUTE")
 
     if option_intraday_data is None or option_intraday_data.empty:
-        logger.write(f"⚠️ No intraday data for {tradingsymbol}, skipping order.")
+        logger.info(f"⚠️ No intraday data for {tradingsymbol}, skipping order.")
         return None
 
     # Process only the last two candles
@@ -161,13 +158,13 @@ def angelone_get_nearest_option_details(api_key,auth_token, smart_api,name, spot
     }
     option_buffer.append(candle)
 
-    logger.write("+---------------------+----------+----------+----------+----------+")
-    logger.write("| Time                | Open     | High     | Low      | Close    |")
-    logger.write("+---------------------+----------+----------+----------+----------+")
+    logger.info("+---------------------+----------+----------+----------+----------+")
+    logger.info("| Time                | Open     | High     | Low      | Close    |")
+    logger.info("+---------------------+----------+----------+----------+----------+")
 
     for candle in [latest_candle]:
         dt_aware = candle.name if candle.name.tzinfo else ist.localize(candle.name)
-        logger.write("| {:<19} | {:>8.2f} | {:>8.2f} | {:>8.2f} | {:>8.2f} |".format(
+        logger.info("| {:<19} | {:>8.2f} | {:>8.2f} | {:>8.2f} | {:>8.2f} |".format(
             dt_aware.strftime('%Y-%m-%d %H:%M'),
             candle['open'],
             candle['high'],
@@ -175,13 +172,13 @@ def angelone_get_nearest_option_details(api_key,auth_token, smart_api,name, spot
             candle['close']
         ))
 
-    print("+---------------------+----------+----------+----------+----------+")
+    logger.info("+---------------------+----------+----------+----------+----------+")
 
     close_price = float(latest_candle["close"])
     target = (close_price * (100 + int(tgt))) / 100
     target_price = round(round(target / option_tick_size) * option_tick_size, 2)
     buy_price = close_price
-    logger.write(f"Strike Price is: {strike}  {option_type}  Entry: {buy_price},  Target : {target_price}")
+    logger.info(f"Strike Price is: {strike}  {option_type}  Entry: {buy_price},  Target : {target_price}")
 
     quantity = lots * lot_size
 
@@ -194,7 +191,7 @@ def angelone_get_nearest_option_details(api_key,auth_token, smart_api,name, spot
             option_type = symbol[-2:]
 
             if quantity_old > 0 and (option_type == "PE" or option_type == "CE"):
-                logger.write(
+                logger.info(
                     f"You have live position for the Trading symbol  {symbol}, Skipping the {option_type}Order placing")
             else:
                 count += 1
@@ -216,7 +213,7 @@ def angelone_connect(api_key, client_id, password, TOTP_Secret):
 
 # ----------- Historical Candle Data -------------
 def angelone_get_historical_data(api_key,auth_token, smart_api,exchange, symboltoken, interval):
-    print(f"{symboltoken}--{interval}")
+    logger.info(f"{symboltoken}--{interval}")
     now = datetime.datetime.now()
     from_dt = (now - datetime.timedelta(days=25)).strftime("%Y-%m-%d %H:%M")
     to_dt = now.strftime("%Y-%m-%d %H:%M")
@@ -253,7 +250,7 @@ def angelone_get_historical_data(api_key,auth_token, smart_api,exchange, symbolt
         df.set_index('timestamp', inplace=True)
         return df
     else:
-        logger.write(f"❌ Failed to fetch historical data: {candles}")
+        logger.error(f"❌ Failed to fetch historical data: {candles}")
 
 
 # ----------- Positions Fetch -------------
@@ -277,12 +274,12 @@ def angelone_fetch_positions(api_key, auth_token):
     data = res.read()
     decoded = data.decode("utf-8")  # Convert bytes → string
     if not decoded:
-        logger.write("❌ Empty response from AngelOne API")
+        logger.error("❌ Empty response from AngelOne API")
         return None
     try:
         parsed = json.loads(decoded)
     except json.JSONDecodeError:
-        logger.write(f"❌ Invalid JSON response: {decoded}")
+        logger.error(f"❌ Invalid JSON response: {decoded}")
         return None
 
     positions = parsed.get("data")
@@ -327,12 +324,12 @@ def angel_place_order(api_key,auth_token, symbol, token, quantity,order_type, pr
     data = res.read()
     decoded = data.decode("utf-8")  # Convert bytes → string
     if not decoded:
-        logger.write("❌ Empty response from AngelOne API")
+        logger.error("❌ Empty response from AngelOne API")
         return None
     try:
         parsed = json.loads(decoded)
     except json.JSONDecodeError:
-        logger.write(f"❌ Invalid JSON response: {decoded}")
+        logger.error(f"❌ Invalid JSON response: {decoded}")
         return None
 
     order_id = parsed.get("data", {}).get("orderid")
@@ -379,12 +376,12 @@ def angelone_gtt_order(api_key,auth_token, symbol, token, price, quantity):
     data = res.read()
     decoded = data.decode("utf-8")  # Convert bytes → string
     if not decoded:
-        logger.write("❌ Empty response from AngelOne API")
+        logger.eror("❌ Empty response from AngelOne API")
         return None
     try:
         parsed = json.loads(decoded)
     except json.JSONDecodeError:
-        logger.write(f"❌ Invalid JSON response: {decoded}")
+        logger.error(f"❌ Invalid JSON response: {decoded}")
         return None
     id_value = parsed.get("data", {}).get("id")
     return  ( id_value)   # Just the id
@@ -442,16 +439,16 @@ def angelone_trade_conditions_check(obj, auth_token, lots, tgt, indicators_df, c
                             latest_willr < -70 and latest_macd < latest_macd_signal) or (
                                                         latest_supertrend > close_price and latest_macd < latest_macd_signal)):
                         angel_place_order(api_key, auth_token, tradingsymbol, instrument_token, quantity ,"SELL", close_price)
-                        logger.write(f"The existing position is type CE with symbol {tradingsymbol}. CE exit condition met, closing existing CE position.")
+                        logger.info(f"The existing position is type CE with symbol {tradingsymbol}. CE exit condition met, closing existing CE position.")
                     elif option_type == "PE" and ((latest_willr > -30 and latest_supertrend < close_price) or (
                             latest_willr > -30 and latest_macd > latest_macd_signal) or (
                                                           latest_supertrend < close_price and latest_macd < latest_macd_signal)):
                         angel_place_order(api_key, auth_token, tradingsymbol, instrument_token, quantity ,"SELL", close_price)
-                        logger.write(f"The existing position is type PE with symbol {tradingsymbol}. PE exit condition met, closing existing PE position.")
+                        logger.info(f"The existing position is type PE with symbol {tradingsymbol}. PE exit condition met, closing existing PE position.")
 
         positions = angelone_fetch_positions(api_key, auth_token)
         if latest_adx > latest_adxema and latest_willr > -30 and latest_supertrend < close_price and latest_macd > latest_macd_signal:
-            logger.write("🔼 BUY SIGNAL GENERATED")
+            logger.info("🔼 BUY SIGNAL GENERATED")
             sys.stdout.flush()
             if positions:
                 count = 0
@@ -462,17 +459,17 @@ def angelone_trade_conditions_check(obj, auth_token, lots, tgt, indicators_df, c
                         tradingsymbol = pos['tradingsymbol']
                         option_type = tradingsymbol[-2:]
                         if option_type == "CE":
-                            logger.write(f"The existing position is type CE with symbol {tradingsymbol}. No new CALL trade placed ")
+                            logger.info(f"The existing position is type CE with symbol {tradingsymbol}. No new CALL trade placed ")
 
                 if count == 0:
                     angelone_get_nearest_option_details(api_key,auth_token, obj,stock, close_price, "CE", lots, tgt)
-                    logger.write(f"There are no live positions and BUY signal generated. Placing a new CE order")
+                    logger.info(f"There are no live positions and BUY signal generated. Placing a new CE order")
             else:
                 angelone_get_nearest_option_details(api_key,auth_token, obj,stock, close_price, "CE", lots, tgt)
-                logger.write(f"There are no positions and BUY signal generated. Placing a new CE order")
+                logger.info(f"There are no positions and BUY signal generated. Placing a new CE order")
 
         elif latest_adx > latest_adxema and latest_willr < -70 and latest_supertrend > close_price and latest_macd < latest_macd_signal:
-            logger.write("🔽 SELL SIGNAL GENERATED")
+            logger.info("🔽 SELL SIGNAL GENERATED")
             sys.stdout.flush()
             if positions:
                 count = 0
@@ -483,15 +480,15 @@ def angelone_trade_conditions_check(obj, auth_token, lots, tgt, indicators_df, c
                         tradingsymbol = pos['tradingsymbol']
                         option_type = tradingsymbol[-2:]
                         if option_type == "PE":
-                            logger.write(f"The existing position is type PE with symbol {tradingsymbol}. No new PUT trade placed ")
+                            logger.info(f"The existing position is type PE with symbol {tradingsymbol}. No new PUT trade placed ")
                 if count == 0:
                     angelone_get_nearest_option_details(api_key,auth_token, obj,stock, close_price, "PE", lots, tgt)
-                    logger.write(f"There are no live positions and SELL signal generated. Placing a new PE order")
+                    logger.info(f"There are no live positions and SELL signal generated. Placing a new PE order")
             else:
                 angelone_get_nearest_option_details(api_key,auth_token, obj,stock, close_price, "PE", lots, tgt)
-                logger.write(f"There are no positions and SELL signal generated. Placing a new PE order")
+                logger.info(f"There are no positions and SELL signal generated. Placing a new PE order")
         else:
-            logger.write("⏸️ NO TRADE SIGNAL GENERATED")
+            logger.info("⏸️ NO TRADE SIGNAL GENERATED")
             sys.stdout.flush()
 
     elif strategy == "Ema10_Ema20_Supertrend":
@@ -512,14 +509,14 @@ def angelone_trade_conditions_check(obj, auth_token, lots, tgt, indicators_df, c
 
                     if option_type == "CE" and (latest_Ema10 < latest_Ema20 or latest_supertrend > close_price):
                         angel_place_order(api_key, auth_token, tradingsymbol, instrument_token, quantity, "SELL",close_price)
-                        logger.write(f"The existing position is type CE with symbol {tradingsymbol}. CE exit condition met, closing existing CE position ")
+                        logger.info(f"The existing position is type CE with symbol {tradingsymbol}. CE exit condition met, closing existing CE position ")
                     elif option_type == "PE" and (latest_Ema10 > latest_Ema20 or latest_supertrend < close_price):
                         angel_place_order(api_key, auth_token, tradingsymbol, instrument_token, quantity, "SELL",close_price)
-                        logger.write(f"The existing position is type PE with symbol {tradingsymbol}. PE exit condition met, closing existing PE position ")
+                        logger.info(f"The existing position is type PE with symbol {tradingsymbol}. PE exit condition met, closing existing PE position ")
 
         positions = angelone_fetch_positions(api_key, auth_token)
         if latest_Ema10 > latest_Ema20 and latest_supertrend < close_price:
-            logger.write("🔼 BUY SIGNAL GENERATED")
+            logger.info("🔼 BUY SIGNAL GENERATED")
             sys.stdout.flush()
             if positions:
                 count = 0
@@ -530,18 +527,18 @@ def angelone_trade_conditions_check(obj, auth_token, lots, tgt, indicators_df, c
                         tradingsymbol = pos['tradingsymbol']
                         option_type = tradingsymbol[-2:]
                         if option_type == "CE":
-                            logger.write(
+                            logger.info(
                                 f"The existing position is type CE with symbol {tradingsymbol}. No new CALL trade placed ")
 
                 if count == 0:
                     angelone_get_nearest_option_details(api_key, auth_token, obj, stock, close_price, "CE",lots, tgt)
-                    logger.write(f"There are no live positions and BUY signal generated. Placing a new CE order")
+                    logger.info(f"There are no live positions and BUY signal generated. Placing a new CE order")
             else:
                 angelone_get_nearest_option_details(api_key, auth_token, obj, stock, close_price, "CE", lots, tgt)
-                logger.write(f"There are no positions and BUY signal generated. Placing a new CE order")
+                logger.info(f"There are no positions and BUY signal generated. Placing a new CE order")
 
         elif latest_Ema10 < latest_Ema20 and latest_supertrend > close_price:
-            logger.write("🔽 SELL SIGNAL GENERATED")
+            logger.info("🔽 SELL SIGNAL GENERATED")
             sys.stdout.flush()
             if positions:
                 count = 0
@@ -552,16 +549,16 @@ def angelone_trade_conditions_check(obj, auth_token, lots, tgt, indicators_df, c
                         tradingsymbol = pos['tradingsymbol']
                         option_type = tradingsymbol[-2:]
                         if option_type == "PE":
-                            logger.write(
+                            logger.info(
                                 f"The existing position is type PE with symbol {tradingsymbol}. No new PUT trade placed ")
                 if count == 0:
                     angelone_get_nearest_option_details(api_key, auth_token, obj, stock, close_price, "PE", lots,tgt)
-                    logger.write(f"There are no live positions and SELL signal generated. Placing a new PE order")
+                    logger.info(f"There are no live positions and SELL signal generated. Placing a new PE order")
             else:
                 angelone_get_nearest_option_details(api_key, auth_token, obj, stock, close_price, "PE", lots, tgt)
-                logger.write(f"There are no positions and SELL signal generated. Placing a new PE order")
+                logger.info(f"There are no positions and SELL signal generated. Placing a new PE order")
         else:
-            logger.write("⏸️ NO TRADE SIGNAL GENERATED")
+            logger.info("⏸️ NO TRADE SIGNAL GENERATED")
             sys.stdout.flush()
     elif strategy == "Ema10_Ema20_MACD_Supertrend":
         latest_Ema10 = indicators_df["ema10"].iloc[-1]
@@ -582,41 +579,41 @@ def angelone_trade_conditions_check(obj, auth_token, lots, tgt, indicators_df, c
                     option_type = tradingsymbol[-2:]
                     if latest_Ema10 > latest_Ema20 and latest_supertrend < close_price and latest_macd > latest_macd_signal:
                         if option_type == "CE":
-                            print("BUY SIGNAL GENERATED. You have existing CALL position. No new order placed")
+                            logger.info("BUY SIGNAL GENERATED. You have existing CALL position. No new order placed")
                         elif option_type == "PE":
-                            print("BUY SIGNAL GENERATED.  Closing existing PUT Position and place new CALL order")
+                            logger.info("BUY SIGNAL GENERATED.  Closing existing PUT Position and place new CALL order")
                             angel_place_order(api_key, auth_token, tradingsymbol, instrument_token, quantity, "SELL",close_price)
                             angelone_get_nearest_option_details(api_key, auth_token, obj, stock, close_price, "CE",lots, tgt)
                     elif latest_Ema10 < latest_Ema20 and latest_supertrend > close_price and latest_macd < latest_macd_signal:
                         if option_type == "PE":
-                            print("SELL SIGNAL GENERATED. You have existing PUT position. No new order placed")
+                            logger.info("SELL SIGNAL GENERATED. You have existing PUT position. No new order placed")
                         elif option_type == "CE":
-                            print("SELL SIGNAL GENERATED.  Closing existing CALL Position and place new CALL order")
+                            logger.info("SELL SIGNAL GENERATED.  Closing existing CALL Position and place new CALL order")
                             angel_place_order(api_key, auth_token, tradingsymbol, instrument_token, quantity, "SELL",close_price)
                             angelone_get_nearest_option_details(api_key, auth_token, obj, stock, close_price, "PE", lots, tgt)
                     elif option_type == "CE":
                         if latest_Ema10 < latest_Ema20 or latest_supertrend > close_price or latest_macd < latest_macd_signal:
-                            print("NO Trade Signal Generated .CALL position exit condition met. Closing existing CALL position")
+                            logger.info("NO Trade Signal Generated .CALL position exit condition met. Closing existing CALL position")
                             angel_place_order(api_key, auth_token, tradingsymbol, instrument_token, quantity, "SELL",close_price)
                     elif option_type == "PE":
                         if latest_Ema10 > latest_Ema20 or latest_supertrend < close_price or latest_macd > latest_macd_signal:
-                            print("NO Trade Signal Generated. PUT position exit condition met. Closing existing PUT position")
+                            logger.info("NO Trade Signal Generated. PUT position exit condition met. Closing existing PUT position")
                             angel_place_order(api_key, auth_token, tradingsymbol, instrument_token, quantity, "SELL",close_price)
             if count == 0:
                 if latest_Ema10 > latest_Ema20 and latest_supertrend < close_price and latest_macd > latest_macd_signal:
-                    print("BUY SIGNAL GENERATED. No live position exist. Placing new CALL order")
+                    logger.info("BUY SIGNAL GENERATED. No live position exist. Placing new CALL order")
                     angelone_get_nearest_option_details(api_key, auth_token, obj, stock, close_price, "CE",lots, tgt)
                 elif latest_Ema10 < latest_Ema20 and latest_supertrend > close_price and latest_macd < latest_macd_signal:
-                    print("SELL SIGNAL GENERATED. No live position exist. Placing new PUT order")
+                    logger.info("SELL SIGNAL GENERATED. No live position exist. Placing new PUT order")
                     angelone_get_nearest_option_details(api_key, auth_token, obj, stock, close_price, "PE", lots, tgt)
                 else:
-                    print("NO Trade Signal Generated")
+                    logger.info("NO Trade Signal Generated")
         else:
             if latest_Ema10 > latest_Ema20 and latest_supertrend < close_price and latest_macd > latest_macd_signal:
-                print("BUY SIGNAL GENERATED. Placing new CALL order")
+                logger.info("BUY SIGNAL GENERATED. Placing new CALL order")
                 angelone_get_nearest_option_details(api_key, auth_token, obj, stock, close_price, "CE",lots, tgt)
             elif latest_Ema10 < latest_Ema20 and latest_supertrend > close_price and latest_macd < latest_macd_signal:
-                print("SELL SIGNAL GENERATED. Placing new PUT order")
+                logger.info("SELL SIGNAL GENERATED. Placing new PUT order")
                 angelone_get_nearest_option_details(api_key, auth_token, obj, stock, close_price, "PE", lots, tgt)
             else:
-                print("NO Trade Signal Generated")
+                logger.info("NO Trade Signal Generated")
