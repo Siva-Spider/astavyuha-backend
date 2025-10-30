@@ -11,9 +11,6 @@ from tabulate import tabulate
 import Next_Now_intervals
 from logger_util import push_log, get_log_buffer, logger
 
-
-instruments = pd.read_csv("https://assets.upstox.com/market-quote/instruments/exchange/complete.csv.gz")
-
 def upstox_trade_history(access_token, segment,  start_date, end_date):
 
     url = 'https://api.upstox.com/v2/charges/historical-trades'
@@ -145,7 +142,7 @@ def upstox_balance(access_token):
         return None
 
 def upstox_equity_instrument_key(name):
-
+    instruments = pd.read_csv("https://assets.upstox.com/market-quote/instruments/exchange/complete.csv.gz")
     instruments['expiry'] = pd.to_datetime(instruments['expiry'], errors='coerce').dt.date
     indices = ['Nifty 50', 'Nifty Bank', 'Nifty Fin Service','NIFTY MID SELECT']
 
