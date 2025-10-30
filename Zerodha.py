@@ -3,8 +3,7 @@ import requests
 import sys
 import pandas as pd
 import datetime
-
-from logger_module import logger
+from logger_util import logger, push_log, push_payload, get_log_buffer
 
 def zerodha_get_equity_balance(api_key, access_token):
 
@@ -111,7 +110,7 @@ def zerodha_intraday_data(kite, instrument_token, interval):
     )
     df = pd.DataFrame(data)
     if df.empty:
-        logger.write(f"⚠️ No intraday data found for {today} (maybe holiday or before market hours).")
+        logger.info(f"⚠️ No intraday data found for {today} (maybe holiday or before market hours).")
         return pd.DataFrame(columns=['timestamp', 'open', 'high', 'low', 'close'])
     else:
         df['date'] = pd.to_datetime(df['date']).dt.tz_localize(None)
@@ -135,7 +134,7 @@ def zerodha_last_candle_data(kite, instrument_token, interval):
     )
     df = pd.DataFrame(data)
     if df.empty:
-        logger.write(f"⚠️ No intraday data found for {today} (maybe holiday or before market hours).")
+        logger.info(f"⚠️ No intraday data found for {today} (maybe holiday or before market hours).")
         return pd.DataFrame(columns=['timestamp', 'open', 'high', 'low', 'close'])
     else:
         df['date'] = pd.to_datetime(df['date']).dt.tz_localize(None)
@@ -160,7 +159,7 @@ def fetch_positions(api_key, access_token):
         all_positions = net_positions+day_positions
         return all_positions
     else:
-        logger.write(f"❌ Failed to fetch positions: {response.status_code} {response.text}")
+        logger.error(f"❌ Failed to fetch positions: {response.status_code} {response.text}")
         return None
 
 def zerodha_place_order(zerodha_api_key, zerodha_access_token, tradingsymbol, quantity):
@@ -177,10 +176,10 @@ def zerodha_place_order(zerodha_api_key, zerodha_access_token, tradingsymbol, qu
             order_type="MARKET",
             price= None,
         )
-        logger.write(f"✅ Order placed successfully! Order ID: {order_id}")
+        logger.info(f"✅ Order placed successfully! Order ID: {order_id}")
         return order_id
     except Exception as e:
-        logger.write(f"❌ Order placement failed: {e}")
+        logger.error(f"❌ Order placement failed: {e}")
         return None
 
 def zerodha_oco_order(kite, symbol, quantity, entry_price, stoploss_price, target_price):
@@ -209,11 +208,11 @@ def zerodha_oco_order(kite, symbol, quantity, entry_price, stoploss_price, targe
                 }
             ]
         )
-        logger.write(f"GTT OCO order placed: {gtt}")
+        logger.info(f"GTT OCO order placed: {gtt}")
         return gtt
 
     except Exception as e:
-        logger.write(f"Error placing GTT order: {e}")
+        logger.error(f"Error placing GTT order: {e}")
 
 def zerodha_close_position(credentials, pos):
     zerodha_api_key = credentials['api_key']
@@ -234,10 +233,10 @@ def zerodha_close_position(credentials, pos):
             order_type="MARKET",
             price=None,
         )
-        logger.write(f"✅ Order placed successfully! Order ID: {order_id}")
+        logger.info(f"✅ Order placed successfully! Order ID: {order_id}")
         return order_id
     except Exception as e:
-        logger.write(f"❌ Order placement failed: {e}")
+        logger.error(f"❌ Order placement failed: {e}")
         return None
 
 def zerodha_fetch_option_data(api_key, access_token, stock, close_price, tgt, lots,option_type):
@@ -315,16 +314,16 @@ def zerodha_trade_conditions_check(lots, tgt, indicators_df, credentials, stock,
                             latest_willr < -70 and latest_macd < latest_macd_signal) or (
                                                         latest_supertrend > close_price and latest_macd < latest_macd_signal)):
                         zerodha_place_order(zerodha_api_key, zerodha_access_token, tradingsymbol, quantity)
-                        logger.write(f"The existing position is type CE with symbol {tradingsymbol}. CE exit condition met, closing existing CE position.")
+                        logger.info(f"The existing position is type CE with symbol {tradingsymbol}. CE exit condition met, closing existing CE position.")
                     elif option_type == "PE" and ((latest_willr > -30 and latest_supertrend < close_price) or (
                             latest_willr > -30 and latest_macd > latest_macd_signal) or (
                                                           latest_supertrend < close_price and latest_macd < latest_macd_signal)):
                         zerodha_place_order(zerodha_api_key, zerodha_access_token, tradingsymbol, quantity)
-                        logger.write(f"The existing position is type PE with symbol {tradingsymbol}. PE exit condition met, closing existing PE position.")
+                        logger.info(f"The existing position is type PE with symbol {tradingsymbol}. PE exit condition met, closing existing PE position.")
 
         positions = fetch_positions(zerodha_api_key, zerodha_access_token)
         if latest_adx > latest_adxema and latest_willr > -30 and latest_supertrend < close_price and latest_macd > latest_macd_signal:
-            logger.write("🔼 BUY SIGNAL GENERATED")
+            logger.info("🔼 BUY SIGNAL GENERATED")
             sys.stdout.flush()
             if positions:
                 count = 0
@@ -335,18 +334,18 @@ def zerodha_trade_conditions_check(lots, tgt, indicators_df, credentials, stock,
                         tradingsymbol = pos.get("tradingsymbol")
                         option_type = tradingsymbol[-2:]
                         if option_type == "CE":
-                            logger.write(
+                            logger.info(
                                 f"The existing position is type CE with symbol {tradingsymbol}. No new CALL trade placed ")
 
                 if count == 0:
                     zerodha_fetch_option_data(zerodha_api_key, zerodha_access_token, stock, close_price, tgt, lots, "CE")
-                    logger.write(f"There are no live positions and BUY signal generated. Placing a new CE order")
+                    logger.info(f"There are no live positions and BUY signal generated. Placing a new CE order")
             else:
                 zerodha_fetch_option_data(zerodha_api_key, zerodha_access_token, stock, close_price,  tgt, lots,"CE")
-                logger.write(f"There are no positions and BUY signal generated. Placing a new CE order")
+                logger.info(f"There are no positions and BUY signal generated. Placing a new CE order")
 
         elif latest_adx > latest_adxema and latest_willr < -70 and latest_supertrend > close_price and latest_macd < latest_macd_signal:
-            logger.write("🔽 SELL SIGNAL GENERATED")
+            logger.info("🔽 SELL SIGNAL GENERATED")
             sys.stdout.flush()
             if positions:
                 count = 0
@@ -357,15 +356,15 @@ def zerodha_trade_conditions_check(lots, tgt, indicators_df, credentials, stock,
                         tradingsymbol = pos.get("tradingsymbol")
                         option_type = tradingsymbol[-2:]
                         if option_type == "PE":
-                            logger.write(f"The existing position is type PE with symbol {tradingsymbol}. No new PUT trade placed ")
+                            logger.info(f"The existing position is type PE with symbol {tradingsymbol}. No new PUT trade placed ")
                 if count == 0:
                     zerodha_fetch_option_data(zerodha_api_key, zerodha_access_token, stock, close_price,  tgt, lots,"PE")
-                    logger.write(f"There are no live positions and SELL signal generated. Placing a new PE order")
+                    logger.info(f"There are no live positions and SELL signal generated. Placing a new PE order")
             else:
                 zerodha_fetch_option_data(zerodha_api_key, zerodha_access_token, stock, close_price, tgt, lots, "PE")
-                logger.write(f"There are no positions and SELL signal generated. Placing a new PE order")
+                logger.info(f"There are no positions and SELL signal generated. Placing a new PE order")
         else:
-            logger.write("⏸️ NO TRADE SIGNAL GENERATED")
+            logger.info("⏸️ NO TRADE SIGNAL GENERATED")
             sys.stdout.flush()
 
     elif strategy == "Ema10_Ema20_Supertrend":
@@ -384,16 +383,16 @@ def zerodha_trade_conditions_check(lots, tgt, indicators_df, credentials, stock,
 
                     if option_type == "CE" and (latest_Ema10 < latest_Ema20 or latest_supertrend > close_price):
                         zerodha_place_order(zerodha_api_key, zerodha_access_token, tradingsymbol, quantity)
-                        logger.write(
+                        logger.info(
                             f"The existing position is type CE with symbol {tradingsymbol}. CE exit condition met, closing existing CE position ")
                     elif option_type == "PE" and (latest_Ema10 > latest_Ema20 or latest_supertrend < close_price):
                         zerodha_place_order(zerodha_api_key, zerodha_access_token, tradingsymbol, quantity)
-                        logger.write(
+                        logger.info(
                             f"The existing position is type PE with symbol {tradingsymbol}. PE exit condition met, closing existing PE position ")
 
         positions = fetch_positions(zerodha_api_key, zerodha_access_token)
         if latest_Ema10 > latest_Ema20 and latest_supertrend < close_price:
-            logger.write("🔼 BUY SIGNAL GENERATED")
+            logger.info("🔼 BUY SIGNAL GENERATED")
             sys.stdout.flush()
             if positions:
                 count = 0
@@ -404,18 +403,18 @@ def zerodha_trade_conditions_check(lots, tgt, indicators_df, credentials, stock,
                         tradingsymbol = pos.get("tradingsymbol")
                         option_type = tradingsymbol[-2:]
                         if option_type == "CE":
-                            logger.write(
+                            logger.info(
                                 f"The existing position is type CE with symbol {tradingsymbol}. No new CALL trade placed ")
 
                 if count == 0:
                     zerodha_fetch_option_data(zerodha_api_key, zerodha_access_token, stock, close_price, tgt,lots, "CE")
-                    logger.write(f"There are no live positions and BUY signal generated. Placing a new CE order")
+                    logger.info(f"There are no live positions and BUY signal generated. Placing a new CE order")
             else:
                 zerodha_fetch_option_data(zerodha_api_key, zerodha_access_token, stock, close_price, tgt, lots, "CE")
-                logger.write(f"There are no positions and BUY signal generated. Placing a new CE order")
+                logger.info(f"There are no positions and BUY signal generated. Placing a new CE order")
 
         elif latest_Ema10 < latest_Ema20 and latest_supertrend > close_price:
-            logger.write("🔽 SELL SIGNAL GENERATED")
+            logger.info("🔽 SELL SIGNAL GENERATED")
             sys.stdout.flush()
             if positions:
                 count = 0
@@ -426,16 +425,16 @@ def zerodha_trade_conditions_check(lots, tgt, indicators_df, credentials, stock,
                         tradingsymbol = pos.get("tradingsymbol")
                         option_type = tradingsymbol[-2:]
                         if option_type == "PE":
-                            logger.write(
+                            logger.info(
                                 f"The existing position is type PE with symbol {tradingsymbol}. No new PUT trade placed ")
                 if count == 0:
                     zerodha_fetch_option_data(zerodha_api_key, zerodha_access_token, stock, close_price, tgt, lots,"PE")
-                    logger.write(f"There are no live positions and SELL signal generated. Placing a new PE order")
+                    logger.info(f"There are no live positions and SELL signal generated. Placing a new PE order")
             else:
                 zerodha_fetch_option_data(zerodha_api_key, zerodha_access_token, stock, close_price, tgt, lots, "PE")
-                logger.write(f"There are no positions and SELL signal generated. Placing a new PE order")
+                logger.info(f"There are no positions and SELL signal generated. Placing a new PE order")
         else:
-            logger.write("⏸️ NO TRADE SIGNAL GENERATED")
+            logger.info("⏸️ NO TRADE SIGNAL GENERATED")
             sys.stdout.flush()
     elif strategy == "Ema10_Ema20_MACD_Supertrend":
         latest_Ema10 = indicators_df["ema10"].iloc[-1]
@@ -457,41 +456,41 @@ def zerodha_trade_conditions_check(lots, tgt, indicators_df, credentials, stock,
                     option_type = tradingsymbol[-2:]
                     if latest_Ema10 > latest_Ema20 and latest_supertrend < close_price and latest_macd > latest_macd_signal:
                         if option_type == "CE":
-                            print("BUY SIGNAL GENERATED. You have existing CALL position. No new order placed")
+                            logger.info("BUY SIGNAL GENERATED. You have existing CALL position. No new order placed")
                         elif option_type == "PE":
-                            print("BUY SIGNAL GENERATED.  Closing existing PUT Position and place new CALL order")
+                            logger.info("BUY SIGNAL GENERATED.  Closing existing PUT Position and place new CALL order")
                             zerodha_place_order(zerodha_api_key, zerodha_access_token, tradingsymbol, quantity)
                             zerodha_fetch_option_data(zerodha_api_key, zerodha_access_token, stock, close_price, tgt, lots, "CE")
                     elif latest_Ema10 < latest_Ema20 and latest_supertrend > close_price and latest_macd < latest_macd_signal:
                         if option_type == "PE":
-                            print("SELL SIGNAL GENERATED. You have existing PUT position. No new order placed")
+                            logger.info("SELL SIGNAL GENERATED. You have existing PUT position. No new order placed")
                         elif option_type == "CE":
-                            print("SELL SIGNAL GENERATED.  Closing existing CALL Position and place new CALL order")
+                            logger.info("SELL SIGNAL GENERATED.  Closing existing CALL Position and place new CALL order")
                             zerodha_place_order(zerodha_api_key, zerodha_access_token, tradingsymbol, quantity)
                             zerodha_fetch_option_data(zerodha_api_key, zerodha_access_token, stock, close_price, tgt, lots, "PE")
                     elif option_type == "CE":
                         if latest_Ema10 < latest_Ema20 or latest_supertrend > close_price or latest_macd < latest_macd_signal:
-                            print("NO Trade Signal Generated .CALL position exit condition met. Closing existing CALL position")
+                            logger.info("NO Trade Signal Generated .CALL position exit condition met. Closing existing CALL position")
                             zerodha_place_order(zerodha_api_key, zerodha_access_token, tradingsymbol, quantity)
                     elif option_type == "PE":
                         if latest_Ema10 > latest_Ema20 or latest_supertrend < close_price or latest_macd > latest_macd_signal:
-                            print("NO Trade Signal Generated. PUT position exit condition met. Closing existing PUT position")
+                            logger.info("NO Trade Signal Generated. PUT position exit condition met. Closing existing PUT position")
                             zerodha_place_order(zerodha_api_key, zerodha_access_token, tradingsymbol, quantity)
             if count == 0:
                 if latest_Ema10 > latest_Ema20 and latest_supertrend < close_price and latest_macd > latest_macd_signal:
-                    print("BUY SIGNAL GENERATED. No live position exist. Placing new CALL order")
+                    logger.info("BUY SIGNAL GENERATED. No live position exist. Placing new CALL order")
                     zerodha_fetch_option_data(zerodha_api_key, zerodha_access_token, stock, close_price, tgt, lots, "CE")
                 elif latest_Ema10 < latest_Ema20 and latest_supertrend > close_price and latest_macd < latest_macd_signal:
-                    print("SELL SIGNAL GENERATED. No live position exist. Placing new PUT order")
+                    logger.info("SELL SIGNAL GENERATED. No live position exist. Placing new PUT order")
                     zerodha_fetch_option_data(zerodha_api_key, zerodha_access_token, stock, close_price, tgt, lots, "PE")
                 else:
-                    print("NO Trade Signal Generated")
+                    logger.info("NO Trade Signal Generated")
         else:
             if latest_Ema10 > latest_Ema20 and latest_supertrend < close_price and latest_macd > latest_macd_signal:
-                print("BUY SIGNAL GENERATED. Placing new CALL order")
+                logger.info("BUY SIGNAL GENERATED. Placing new CALL order")
                 zerodha_fetch_option_data(zerodha_api_key, zerodha_access_token, stock, close_price, tgt, lots, "CE")
             elif latest_Ema10 < latest_Ema20 and latest_supertrend > close_price and latest_macd < latest_macd_signal:
-                print("SELL SIGNAL GENERATED. Placing new PUT order")
+                logger.info("SELL SIGNAL GENERATED. Placing new PUT order")
                 zerodha_fetch_option_data(zerodha_api_key, zerodha_access_token, stock, close_price, tgt, lots, "PE")
             else:
-                print("NO Trade Signal Generated")
+                logger.info("NO Trade Signal Generated")
