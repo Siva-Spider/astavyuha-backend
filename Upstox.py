@@ -1,6 +1,5 @@
 import sys
 import time
-import gevent
 from collections import deque
 import requests
 import pandas as pd
@@ -34,7 +33,7 @@ def upstox_trade_history(access_token, segment,  start_date, end_date):
         data = response.json().get('data')
         return data
     else:
-        push_log(f"Error: {response.status_code} - {response.text}")
+        push_log(f"Error: {response.status_code} - {response.text}", "error")
 
 def upstox_profit_loss(access_token, segment, from_date, to_date, year):
     # --- Fetch profit/loss data ---
@@ -69,7 +68,7 @@ def upstox_profit_loss(access_token, segment, from_date, to_date, year):
     # ✅ Handle None or missing structure gracefully
     cb = (data_charges or {}).get("charges_breakdown", {})
     if not cb:
-        print("⚠️ No charges breakdown data available.")
+        push_log("⚠️ No charges breakdown data available.", "warning")
         return data, []
 
     # --- Flatten dynamically ---
@@ -91,7 +90,9 @@ def upstox_profile(access_token):
         'Accept': 'application/json',
         'Authorization': f'Bearer {access_token}'
     }
+    push_log("1")
     try:
+        push_log("2")
         response = requests.get(url, headers=headers)
         #push_log(f"Status Code: {response.status_code}")
         if response.status_code == 200:
@@ -104,13 +105,13 @@ def upstox_profile(access_token):
                            'Email':response_data.get('data')['email']}
                 return profile
             else:
-                push_log("⚠️ Failed to retrieve balance: Invalid response structure")
+                push_log("⚠️ Failed to retrieve balance: Invalid response structure", "warning")
                 return None
         else:
-            push_log(f"🚨 API Error {response.status_code}: {response.text}")
+            push_log(f"🚨 API Error {response.status_code}: {response.text}", "error")
             return None
     except Exception as e:
-        push_log(f"🚨 Exception in balance function: {e}")
+        push_log(f"🚨 Exception in profile function: {e}", "error")
     return None
 
 def upstox_balance(access_token):
@@ -133,13 +134,13 @@ def upstox_balance(access_token):
                 balance = {"Total Balance":total_balance, "Available Margin":response_data['data']['equity']['available_margin'],"Used Margin":response_data['data']['equity']['used_margin']}
                 return balance
             else:
-                push_log("⚠️ Failed to retrieve balance: Invalid response structure")
+                push_log("⚠️ Failed to retrieve balance: Invalid response structure", "warning")
                 return None
         else:
-            push_log(f"🚨 API Error {response.status_code}: {response.text}")
+            push_log(f"🚨 API Error {response.status_code}: {response.text}", "error")
             return None
     except Exception as e:
-        push_log(f"🚨 Exception in balance function: {e}")
+        push_log(f"🚨 Exception in balance function: {e}", "error")
         return None
 
 def upstox_equity_instrument_key(name):
@@ -160,14 +161,14 @@ def upstox_equity_instrument_key(name):
         ]
 
     if filtered.empty:
-        push_log("❌ No matching option instrument found")
+        push_log("❌ No matching option instrument found", "error")
         return
 
     if not filtered.empty:
         instrument_key = filtered.iloc[0]['instrument_key']
         return instrument_key
     else:
-        push_log("❌ No matching option instrument found")
+        push_log("❌ No matching option instrument found", "error")
         return
 
 def upstox_fetch_historical_data_with_retry(access_token, instrument_key, interval):
@@ -202,11 +203,11 @@ def upstox_fetch_historical_data_with_retry(access_token, instrument_key, interv
             return df
 
         else:
-            push_log(f"⚠️ No data on {start_date} (market holiday or no trades). Trying earlier day...")
+            push_log(f"⚠️ No data on {start_date} (market holiday or no trades). Trying earlier day...", "warning")
     else:
-        push_log(f"❌ Failed to fetch data for {start_date}. HTTP {response.status_code} and {response.json()}. Retrying...")
+        push_log(f"❌ Failed to fetch data for {start_date}. HTTP {response.status_code} and {response.json()}. Retrying...", "error")
 
-    push_log(f"❗Could not fetch historical data for {instrument_key} from 25 days.")
+    push_log(f"❗Could not fetch historical data for {instrument_key} from 25 days.", "error")
     return pd.DataFrame()
 
 def upstox_fetch_intraday_data(access_token, instrument_key, interval):
@@ -243,16 +244,16 @@ def upstox_fetch_intraday_data(access_token, instrument_key, interval):
                     else:
                         push_log(f"⏳ Waiting for complete candle data... Retry in {sleep_interval}s")
                 else:
-                    push_log("⚠️ No candle data found in response.")
+                    push_log("⚠️ No candle data found in response.", "warning")
             else:
-                push_log(f"🚨 API Error {response.status_code}: {response.text}")
+                push_log(f"🚨 API Error {response.status_code}: {response.text}", "error")
         except Exception as e:
-            push_log(f"🚨 Exception in fetch_intraday_data: {e}")
+            push_log(f"🚨 Exception in fetch_intraday_data: {e}", "error")
 
-        gevent.sleep(sleep_interval)
+        time.sleep(sleep_interval)
         waited += sleep_interval
 
-    push_log("❌ Failed to fetch complete candle data within 30 seconds.")
+    push_log("❌ Failed to fetch complete candle data within 30 seconds.", "error")
     return None
 
 def upstox_fetch_positions(access_token):
@@ -266,7 +267,7 @@ def upstox_fetch_positions(access_token):
     if response.status_code == 200:
         positions = response.json().get('data', [])
         return positions
-    push_log(f"Failed to fetch positions: {response.text}")
+    push_log(f"Failed to fetch positions: {response.text}", "error")
     return []
 
 
@@ -308,16 +309,16 @@ def upstox_ohlc_data_fetch(access_token, instrument_key):
                     }
 
                 except KeyError as e:
-                    push_log(f"OHLC KeyError in response: {e}")
+                    push_log(f"OHLC KeyError in response: {e}", "error")
                     return None
             else:
-                push_log("OHLC Error:", response.status_code, response.text)
-                gevent.sleep(2)
+                push_log("OHLC Error:, {response.status_code}, {response.text}", "error")
+                time.sleep(2)
                 return None
         except requests.exceptions.RequestException as e:
-            push_log(f"🔌 OHLC Network error (attempt {attempt}/{retries}): {e}")
+            push_log(f"🔌 OHLC Network error (attempt {attempt}/{retries}): {e}", "error")
 
-        gevent.sleep(1)
+        time.sleep(1)
 
 def upstox_live_option_Value(access_token, instrument_key):
     url = 'https://api.upstox.com/v3/market-quote/ohlc'
@@ -343,11 +344,11 @@ def upstox_live_option_Value(access_token, instrument_key):
             if close_price is not None:
                 return close_price
             else:
-                push_log(f"Close price not available for {token}.")
+                push_log(f"Close price not available for {token}.", "warning")
         else:
-            push_log("No data field in response.")
+            push_log("No data field in response.", "warning")
     else:
-        push_log(f"Request failed with status code: {response.status_code}")
+        push_log(f"Request failed with status code: {response.status_code}", "error")
 
 def upstox_close_position(credentials, pos):
     access_token = credentials['access_token']
@@ -383,10 +384,10 @@ def upstox_close_position(credentials, pos):
         if response.status_code == 200:
             push_log("Position closed successfully")
         else:
-            push_log(f"Order placed not successful. The response code is : {response.status_code}")
+            push_log(f"Order placed not successful. The response code is : {response.status_code}", "warning")
     except Exception as e:
         # Handle exceptions
-        push_log('Error:', str(e))
+        push_log(f'Error: {str(e)}', "error")
 
 def upstox_place_order_single(access_token, instrument_token, quantity, transaction_type,price):
 
@@ -429,12 +430,12 @@ def upstox_place_order_single(access_token, instrument_token, quantity, transact
             elif transaction_type == "SELL":
                 push_log("Old option position closed successfully")
         else:
-            push_log(f"Order placed not successful. The response code is : {response.status_code}")
+            push_log(f"Order placed not successful. The response code is : {response.status_code}", "warning")
 
 
     except Exception as e:
         # Handle exceptions
-        push_log('Error:', str(e))
+        push_log(f'Error: {str(e)}', "error")
 
 def upstox_gtt_place_order(access_token, instrument_key, quantity, transaction_type, entry,tgt):
     try:
@@ -474,9 +475,9 @@ def upstox_gtt_place_order(access_token, instrument_key, quantity, transaction_t
             push_log("✅ GTT order placed successfully.")
             return res.status_code
         else:
-            push_log(f"❌ GTT order placement failed: {res.text}")
+            push_log(f"❌ GTT order placement failed: {res.text}", "error")
     except Exception as e:
-        push_log(f"❌ Error placing GTT order: {e}")
+        push_log(f"❌ Error placing GTT order: {e}", "error")
 def upstox_commodity_instrument_key(name, symbol, close_price, option_type):
     # Load instrument data
     instruments = pd.read_csv("https://assets.upstox.com/market-quote/instruments/exchange/complete.csv.gz")
@@ -491,7 +492,7 @@ def upstox_commodity_instrument_key(name, symbol, close_price, option_type):
     ].copy()
 
     if filtered.empty:
-        push_log(f"❌ No OPTFUT contracts found for {name}")
+        push_log(f"❌ No OPTFUT contracts found for {name}", "error")
         return pd.DataFrame()
 
     # Ensure strike is numeric
@@ -510,7 +511,7 @@ def upstox_commodity_instrument_key(name, symbol, close_price, option_type):
     filtered = filtered[filtered['symbol_prefix'] == symbol]
 
     if filtered.empty:
-        push_log(f"⚠️ No instruments matched with symbol prefix '{symbol}'")
+        push_log(f"⚠️ No instruments matched with symbol prefix '{symbol}'", "warning")
         return pd.DataFrame()
 
     # Find nearest strike above and below
@@ -525,7 +526,7 @@ def upstox_commodity_instrument_key(name, symbol, close_price, option_type):
     elif pd.notna(below_strike):
         nearest_strike = below_strike
     else:
-        push_log(f"⚠️ No nearby strikes found for {name} near price {close_price}")
+        push_log(f"⚠️ No nearby strikes found for {name} near price {close_price}", "warning")
         return pd.DataFrame()
 
     # Get all rows for that nearest strike
@@ -566,7 +567,7 @@ def upstox_equity_option_instrument_key( stock,symbol, spot_value, option_type):
         ]
 
     if filtered.empty:
-        push_log("❌ No matching option instrument found")
+        push_log("❌ No matching option instrument found", "warning")
     else:
         filtered = filtered.copy()  # ✅ prevents slice warning
         filtered['strike'] = pd.to_numeric(filtered['strike'], errors='coerce')
@@ -574,7 +575,7 @@ def upstox_equity_option_instrument_key( stock,symbol, spot_value, option_type):
         # All available expiries
         sorted_expiries = sorted(filtered['expiry'].unique())
         if not sorted_expiries:
-            push_log("❌ No expiry available")
+            push_log("❌ No expiry available", "warning")
         else:
             nearest_expiry = sorted_expiries[0]
 
@@ -615,7 +616,7 @@ def upstox_commodity_option_instrument_key(name, symbol, close_price, option_typ
     ].copy()
 
     if filtered.empty:
-        push_log(f"❌ No OPTFUT contracts found for {name}")
+        push_log(f"❌ No OPTFUT contracts found for {name}", "warning")
         return pd.DataFrame()
 
     # Ensure strike is numeric
@@ -634,7 +635,7 @@ def upstox_commodity_option_instrument_key(name, symbol, close_price, option_typ
     filtered = filtered[filtered['symbol_prefix'] == symbol]
 
     if filtered.empty:
-        push_log(f"⚠️ No instruments matched with symbol prefix '{symbol}'")
+        push_log(f"⚠️ No instruments matched with symbol prefix '{symbol}'", "warning")
         return pd.DataFrame()
 
     # Find nearest strike above and below
@@ -649,7 +650,7 @@ def upstox_commodity_option_instrument_key(name, symbol, close_price, option_typ
     elif pd.notna(below_strike):
         nearest_strike = below_strike
     else:
-        push_log(f"⚠️ No nearby strikes found for {name} near price {close_price}")
+        push_log(f"⚠️ No nearby strikes found for {name} near price {close_price}", "waring")
         return pd.DataFrame()
 
     # Get all rows for that nearest strike
@@ -685,7 +686,7 @@ def upstox_fetch_option_data(upstox_access_token,stock, symbol, exchange_type,sp
     option_intraday_data = upstox_fetch_intraday_data(upstox_access_token, instrument_key, 1)
 
     if option_intraday_data is None or option_intraday_data.empty or len(option_intraday_data) < 1:
-        push_log("⚠️ Insufficient intraday data for option (need at least 1 candles).")
+        push_log("⚠️ Insufficient intraday data for option (need at least 1 candles).", "warning")
         return
 
     # Process only the last two candles
@@ -760,7 +761,7 @@ def upstox_commodity_instrument_key(name, symbol):
     ].copy()
 
     if filtered.empty:
-        push_log(f"❌ No FUTCOM contracts found for {name}")
+        push_log(f"❌ No FUTCOM contracts found for {name}", "warning")
         return pd.DataFrame()
 
     today = datetime.datetime.now().date()
@@ -811,14 +812,13 @@ def upstox_commodity_instrument_key(name, symbol):
     matched = find_valid_symbol(symbols)
 
     if matched.empty:
-        push_log("❌ No suitable contract found even in later month.")
+        push_log("❌ No suitable contract found even in later month.", "warning")
         push_log("🧾 Available tradingsymbols for reference:")
         push_log(filtered[['tradingsymbol', 'expiry']].head(10))
 
     return matched
 
 def upstox_trade_conditions_check(lots, tgt, indicators_df, credentials, stock,symbol, exchange_type,strategy):
-    push_log(f"CREDENTIALS = {credentials}")
     upstox_access_token = credentials['access_token']
     if strategy == "ADX_MACD_WillR_Supertrend":
         # ✅ Check for signal
