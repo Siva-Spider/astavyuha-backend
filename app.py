@@ -870,18 +870,24 @@ def run_trading_logic_for_all(trading_parameters, selected_brokers, logger):
         instrument_key = None
         try:
             if exchange_type == "EQUITY":
-                if broker_name.lower() == "upstox":
-                    instrument_key = us.upstox_equity_instrument_key(company)
-                elif broker_name.lower() == "zerodha":
-                    broker_info = next((b for b in selected_brokers if b['name'] == broker_key), None)
-                    if broker_info:
-                        api_key = broker_info['credentials'].get("api_key")
-                        access_token = broker_info['credentials'].get("access_token")
-                        instrument_key = zr.zerodha_instruments_token(api_key, access_token, symbol)
-                elif broker_name.lower() == "angelone":
-                    instrument_key = ar.angelone_get_token_by_name(symbol)
-                elif broker_name.lower() == "5paisa":
-                    instrument_key = fp.fivepaisa_scripcode_fetch(symbol)
+                retries = 3
+                for attempt in range(retries):
+                    try:
+                        if broker_name.lower() == "upstox":
+                            instrument_key = us.upstox_equity_instrument_key(company)
+                        elif broker_name.lower() == "zerodha":
+                            broker_info = next((b for b in selected_brokers if b['name'] == broker_key), None)
+                            if broker_info:
+                                api_key = broker_info['credentials'].get("api_key")
+                                access_token = broker_info['credentials'].get("access_token")
+                                instrument_key = zr.zerodha_instruments_token(api_key, access_token, symbol)
+                        elif broker_name.lower() == "angelone":
+                            instrument_key = ar.angelone_get_token_by_name(symbol)
+                        elif broker_name.lower() == "5paisa":
+                            instrument_key = fp.fivepaisa_scripcode_fetch(symbol)
+                     except Exception as e:
+                        push_log(f"Attempt {attempt+1}/{retries} failed fetching Upstox instrument key: {e}", "error")
+                        time.sleep(1)
             elif exchange_type == "COMMODITY" and broker_name.lower() == "upstox":
                 matched = us.upstox_commodity_instrument_key(name, symbol)
                 instrument_key = matched['instrument_key'].iloc[0]
