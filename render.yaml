@@ -7,7 +7,7 @@ projects:
     services:
     - type: web
       name: astavyuha-backend
-      runtime: python
+      runtime: python = ">=3.10,<3.14"
       repo: https://github.com/Siva-Spider/astavyuha-backend
       plan: free
       region: oregon
