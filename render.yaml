@@ -7,7 +7,7 @@ projects:
     services:
     - type: web
       name: astavyuha-backend
-      runtime: python-3.11
+      runtime: python 3.11
       repo: https://github.com/Siva-Spider/astavyuha-backend
       plan: free
       region: oregon
