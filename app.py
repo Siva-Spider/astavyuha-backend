@@ -3,7 +3,6 @@ import json
 import time
 import traceback
 import gc
-import logging
 import datetime
 import random
 import sqlite3
@@ -20,7 +19,6 @@ from upstox_instrument_manager import LATEST_LINK_FILENAME, DATA_DIR, update_ins
 import Next_Now_intervals as nni
 import combinding_dataframes as cdf
 import indicators as ind
-from tabulate import tabulate
 from kiteconnect import KiteConnect
 import threading
 from collections import deque
@@ -209,7 +207,8 @@ def send_email(to_email, subject, body):
         server.quit()
         return True
     except Exception as e:
-        logger.exception("Failed to send email: %s", e)
+        msg = "Failed to send email: %s", e
+        push_log(msg, "error")
         return False
 
 # ----------------- Broker connect endpoint (kept original) ----------------
@@ -343,7 +342,8 @@ def get_lot_size():
         else:
             return jsonify({"message": "Lot size not found for the given symbol."}), 404
     except Exception as e:
-        logger.exception("Error in get_lot_size: %s", e)
+        msg = "Error in get_lot_size: %s", e
+        push_log(msg, "error")
         return jsonify({"error": str(e)}), 500
 
 # ----------------- Find positions helper (original) ----------------
@@ -389,7 +389,8 @@ def find_positions_for_symbol(broker, symbol, credentials):
                 matching.append(pos)
         return matching
     except Exception as e:
-        logger.exception("Error fetching positions for %s, %s: %s", broker, symbol, e)
+        msg = "Error fetching positions for %s, %s: %s", broker, symbol, e
+        push_log(msg, "error")
         return []
 
 # ----------------- Misc admin & user endpoints (preserved) ----------------
@@ -429,13 +430,15 @@ def register():
         return jsonify({"success": False, "message": "Database error"}), 500
     except Exception as e:
         conn.close()
-        logger.exception("Database insert error: %s", e)
+        msg = "Database insert error: %s", e
+        push_log(msg, "error")
         return jsonify({"success": False, "message": "Unexpected server error"}), 500
 
     try:
         send_email(email, "Welcome to AutoTrade", f"Hello {username},\n\nYour registration is received successfully.\nYou’ll get an approval email soon after verification.\n\nThank you for joining AutoTrade!")
     except Exception as e:
-        logger.exception("Email sending failed: %s", e)
+        msg = "Email sending failed: %s", e
+        push_log(msg, "warning")
 
     conn.close()
     return jsonify({"success": True, "message": "Registration submitted successfully"}), 200
@@ -463,7 +466,8 @@ def send_welcome_email():
         server.quit()
         return jsonify({"status": "success", "message": "Welcome email sent!"})
     except Exception as e:
-        logger.exception("Email sending failed: %s", e)
+        msg = "Email sending failed: %s", e
+        push_log(msg, "warning")
         return jsonify({"status": "error", "message": "Email sending failed"}), 500
 
 @app.route('/api/send-support-mail', methods=['POST'])
@@ -491,7 +495,8 @@ def send_support_mail():
         server.quit()
         return jsonify({"status": "success", "message": "Support email sent successfully!"})
     except Exception as e:
-        logger.exception("Support email failed: %s", e)
+        msg = "Support email failed: %s", e
+        push_log(msg, "warning")
         return jsonify({"status": "error", "message": "Email sending failed"}), 500
 
 def load_otp_store():
@@ -531,7 +536,8 @@ def send_otp():
     otp_store[user_id] = {"otp": otp, "timestamp": timestamp}
     save_otp_store(otp_store)
 
-    logger.info("OTP for %s (%s): %s", user_id, email, otp)
+    msg = "OTP for %s (%s): %s", user_id, email, otp
+    push_log(msg)
 
     # Prepare email content
     subject = "Your Password Reset OTP"
@@ -678,7 +684,8 @@ def approve_user(userId):
     try:
         send_email(user[2], "Registration Approved", f"Hello {user[1]},\n\nYour registration has been approved. You can now log in and start using the system.\n\nRegards,\nAdmin Team")
     except Exception as e:
-        logger.exception("Approval email failed: %s", e)
+        msg = "Approval email failed: %s", e
+        push_log(msg, "warning")
         return jsonify({"success": True, "message": f"User approved but email failed: {str(e)}"}), 500
     return jsonify({"success": True, "message": "User approved and email sent"}), 200
 
@@ -702,7 +709,8 @@ def reject_user(userId):
     try:
         send_email(user[2], "Registration Rejected", f"Hello {user[1]},\n\nWe regret to inform you that your registration has been rejected.\n\nRegards,\nAdmin Team")
     except Exception as e:
-        logger.exception("Rejection email failed: %s", e)
+        msg = "Rejection email failed: %s", e
+        push_log(msg, "warning")
         return jsonify({"success": True, "message": f"User rejected but email failed: {str(e)}"}), 500
     return jsonify({"success": True, "message": "User rejected and email sent"}), 200
 
@@ -724,7 +732,8 @@ def reset_password(userId):
     try:
         send_email(user_email, "Your password has been reset", f"New password: {new_password}")
     except Exception as e:
-        logger.exception("Reset email failed: %s", e)
+        msg = "Reset email failed: %s", e
+        push_log(msg, 'warning')
         return jsonify({"success": False, "message": f"Password reset but email failed: {str(e)}"}), 500
     return jsonify({"success": True, "message": "Password reset and email sent"})
 
@@ -795,6 +804,7 @@ def stream_logs():
                 time.sleep(1)
 
     return Response(event_stream(), mimetype="text/event-stream")
+
 
 @app.route('/api/get_profit_loss', methods=['POST'])
 def get_profit_loss():
@@ -1214,7 +1224,8 @@ def get_logged_in_users(userid):
             return jsonify(user), 200
         return jsonify({"error": "User not found"}), 404
     except Exception as e:
-        logger.exception("Get logged-in users failed: %s", e)
+        msg = "Get logged-in users failed: %s", e
+        push_log(msg, "warning")
         return jsonify({"error": str(e)}), 500
 
 # ----------------- Admin delete user endpoints preserved ----------------
@@ -1238,7 +1249,8 @@ if __name__ == '__main__':
     try:
         update_instrument_file()
     except Exception:
-        logger.exception("update_instrument_file failed at startup: %s", traceback.format_exc())
+        msg = "update_instrument_file failed at startup: %s", traceback.format_exc()
+        push_log(msg, "error")
 
     port = int(os.environ.get('PORT', 5000))
     debug_flag = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
