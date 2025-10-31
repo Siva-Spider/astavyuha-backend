@@ -1,5 +1,5 @@
 from gevent import monkey
-monkey.patch_all(socket=True, ssl=False, thread=False)
+monkey.patch_all()
 
 import os
 import json
