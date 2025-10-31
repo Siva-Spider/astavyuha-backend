@@ -1,0 +1,17 @@
+# Exported from Render on 2025-10-31T07:01:35Z
+version: "1"
+projects:
+- name: My project
+  environments:
+  - name: Production
+    services:
+    - type: web
+      name: astavyuha-backend
+      runtime: python-3.11
+      repo: https://github.com/Siva-Spider/astavyuha-backend
+      plan: free
+      region: oregon
+      buildCommand: pip install -r requirements.txt
+      startCommand: gunicorn app:app --worker-class gevent --no-monkey-patch --timeout
+        0
+      autoDeployTrigger: commit
