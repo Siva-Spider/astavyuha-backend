@@ -749,69 +749,51 @@ def delete_rejected_user(userId):
 # ----------------- stream logs endpoint (single copy) ----------------
 @app.route("/api/stream-logs")
 def stream_logs():
-    _LOG_MAX = int(os.environ.get("AUTOTRADE_LOG_BUFFER", 500))
-    _log_buf = deque(maxlen=_LOG_MAX)
-    _log_lock = threading.Lock()
-    def event_stream():
+    """
+    Safe non-blocking Server-Sent Events stream.
+    Uses a background thread instead of blocking Gunicorn's worker.
+    Compatible with --worker-class gevent or sync workers.
+    """
+    from queue import Queue, Empty
+
+    # Shared log queue for async push
+    log_queue = Queue()
+
+    def producer():
+        """Background thread that periodically fetches logs and puts them into the queue."""
         seen = set()
-        # loop forever, sending new unique messages from either buffer
         while True:
             try:
-                # copy local buffer safely
-                try:
-                    with _log_lock:
-                        local_items = list(_log_buf)
-                except Exception:
-                    local_items = []
-                # try to get external buffer from logger_util (if available)
-                try:
-                    from logger_util import get_log_buffer
-                    external_items = get_log_buffer() or []
-                except Exception:
-                    external_items = []
-
-                # merge (local first so recent app messages show up), then stream unseen items
-                merged = local_items + external_items
-
-                for it in merged:
-                    # create a stable dedupe key (timestamp + message text)
+                from logger_util import get_log_buffer
+                items = get_log_buffer() or []
+                for it in items:
                     key = (it.get("ts"), str(it.get("message")))
-                    if key in seen:
-                        continue
-                    seen.add(key)
-
-                    event_name = it.get("type", "log")
-                    try:
-                        data_str = json.dumps(it, default=str)
-                    except Exception:
-                        data_str = json.dumps({"type": "log", "ts": it.get("ts"), "message": str(it.get("message"))})
-                    yield f"event: {event_name}\ndata: {data_str}\n\n"
-
-                # sleep briefly, then loop
+                    if key not in seen:
+                        seen.add(key)
+                        log_queue.put(it)
+                # Sleep briefly without blocking Gunicorn
                 time.sleep(0.5)
+            except Exception:
+                time.sleep(1)
 
-                # If buffers shrank (rotation/trim), prune seen to last N items to avoid memory growth
-                try:
-                    combined_len = len(local_items) + len(external_items)
-                    keep = max(500, combined_len)  # keep recent keys up to this many
-                    tail = (local_items + external_items)[-keep:]
-                    new_seen = set((it.get("ts"), str(it.get("message"))) for it in tail if it)
-                    seen = new_seen
-                except Exception:
-                    # ignore pruning errors and continue
-                    pass
+    # Start producer thread (daemon so it stops with request)
+    threading.Thread(target=producer, daemon=True).start()
 
+    def event_stream():
+        """Generator yielding events from the queue."""
+        while True:
+            try:
+                item = log_queue.get(timeout=5)
+                data_str = json.dumps(item, default=str)
+                yield f"event: {item.get('type', 'log')}\ndata: {data_str}\n\n"
+            except Empty:
+                # Keep connection alive
+                yield ": keep-alive\n\n"
             except GeneratorExit:
-                # client disconnected
                 break
             except Exception:
-                # on unexpected exceptions, wait a bit and continue streaming
-                try:
-                    push_log("Stream-logs encountered an error; continuing.", "error")
-                except Exception:
-                    pass
                 time.sleep(1)
-        # normal generator end
+
     return Response(event_stream(), mimetype="text/event-stream")
 
 @app.route('/api/get_profit_loss', methods=['POST'])
