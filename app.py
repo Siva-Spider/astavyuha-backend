@@ -1,3 +1,6 @@
+from gevent import monkey
+monkey.patch_all(socket=True, ssl=False, thread=False)
+
 import os
 import json
 import time
