@@ -872,10 +872,6 @@ def run_trading_logic_for_all(trading_parameters, selected_brokers, logger):
         interval = stock.get('interval')
         exchange_type = stock.get('type')
 
-        push_log(symbol)
-        push_log(name)
-        push_log(company)
-
         msg = f"🔑 Fetching instrument key for {company} ({symbol}) via {broker_name}..."
         push_log(msg)
 
@@ -884,7 +880,6 @@ def run_trading_logic_for_all(trading_parameters, selected_brokers, logger):
             if exchange_type == "EQUITY":
                 retries = 3
                 for attempt in range(retries):
-                    push_log(company)
                     try:
                         if broker_name.lower() == "upstox":
                             instrument_key = us.upstox_equity_instrument_key(company)
