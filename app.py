@@ -1018,7 +1018,7 @@ def run_trading_logic_for_all(trading_parameters, selected_brokers, logger):
                 push_log(line())
                 push_log(header)
                 push_log(line())
-                push_log(values)
+                push_log(values+"\n")
                 push_log(line())
                 #push_log(tabulate(indicators_df.tail(1), headers="keys", tablefmt="pretty", showindex=False))
 
