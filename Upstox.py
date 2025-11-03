@@ -548,6 +548,7 @@ def upstox_equity_option_instrument_key( stock,symbol, spot_value, option_type):
     push_log(symbol)
     if symbol in indices:
         instrument_type = "OPTIDX"
+        stock = symbol
     else:
         instrument_type = "OPTSTK"
 
