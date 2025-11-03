@@ -1175,7 +1175,6 @@ def disconnect_stock():
     symbol = data.get("symbol_value")
     if symbol in active_trades:
         active_trades.pop(symbol, None)
-        push_log(f"❌ {symbol} Disconnection happens after the current trade cycle(Interval).")
         return jsonify({"message": f"❌ {symbol} Disconnection happens after the current trade cycle(Interval). "})
     return jsonify({"message": "⚠️ Stock not active"})
 
