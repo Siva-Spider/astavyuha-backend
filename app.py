@@ -1,6 +1,7 @@
 from gevent import monkey
 monkey.patch_all()
 
+from gevent import sleep as gsleep
 import os
 import json
 import time
@@ -789,9 +790,9 @@ def stream_logs():
                         seen.add(key)
                         log_queue.put(it)
                 # Sleep briefly without blocking Gunicorn
-                time.sleep(0.5)
+                gsleep(0.5)
             except Exception:
-                time.sleep(1)
+                gsleep(1)
 
     # Start producer thread (daemon so it stops with request)
     threading.Thread(target=producer, daemon=True).start()
@@ -809,7 +810,7 @@ def stream_logs():
             except GeneratorExit:
                 break
             except Exception:
-                time.sleep(1)
+                gsleep(1)
 
     return Response(event_stream(), mimetype="text/event-stream")
 
@@ -895,7 +896,7 @@ def run_trading_logic_for_all(trading_parameters, selected_brokers, logger):
                             instrument_key = fp.fivepaisa_scripcode_fetch(symbol)
                     except Exception as e:
                         push_log(f"Attempt {attempt+1}/{retries} failed fetching Upstox instrument key: {e}", "error")
-                        time.sleep(1)
+                        gsleep(1)
             elif exchange_type == "COMMODITY" and broker_name.lower() == "upstox":
                 matched = us.upstox_commodity_instrument_key(name, symbol)
                 instrument_key = matched['instrument_key'].iloc[0]
@@ -1007,7 +1008,7 @@ def run_trading_logic_for_all(trading_parameters, selected_brokers, logger):
 
                 msg = f"✅ Data ready for {symbol}"
                 push_log(msg)
-                time.sleep(0.5)
+                gsleep(0.5)
                 indicators_df = ind.all_indicators(combined_df,strategy)
                 row = indicators_df.tail(1).iloc[0]
                 cols = indicators_df.columns.tolist()
@@ -1064,14 +1065,14 @@ def run_trading_logic_for_all(trading_parameters, selected_brokers, logger):
                 except Exception:
                     pass
                 gc.collect()
-                time.sleep(0)
+                gsleep(0)
 
             push_log("✅ Trading cycle complete")
 
             msg = f"Present Interval Start : {now_interval}, Next Interval Start :{next_interval}"
             push_log(msg)
             push_log("Waiting for next interval beginning .....")
-            time.sleep(1)
+            gsleep(1)
 
     push_log("All active trades ended. Exiting trading loop.")
     gc.collect()
