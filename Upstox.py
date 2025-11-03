@@ -90,9 +90,7 @@ def upstox_profile(access_token):
         'Accept': 'application/json',
         'Authorization': f'Bearer {access_token}'
     }
-    push_log("1")
     try:
-        push_log("2")
         response = requests.get(url, headers=headers)
         push_log(f"Status Code: {response.status_code}")
         if response.status_code == 200:
