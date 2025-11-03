@@ -879,7 +879,7 @@ def run_trading_logic_for_all(trading_parameters, selected_brokers, logger):
         instrument_key = None
         try:
             if exchange_type == "EQUITY":
-                retries = 3
+                retries = 1
                 for attempt in range(retries):
                     try:
                         if broker_name.lower() == "upstox":
@@ -894,10 +894,6 @@ def run_trading_logic_for_all(trading_parameters, selected_brokers, logger):
                             instrument_key = ar.angelone_get_token_by_name(symbol)
                         elif broker_name.lower() == "5paisa":
                             instrument_key = fp.fivepaisa_scripcode_fetch(symbol)
-                            
-                        if instrument_key:
-                            push_log(f"✅ Found instrument key  {instrument_key} for {symbol}")
-                            break
                     except Exception as e:
                         push_log(f"Attempt {attempt+1}/{retries} failed fetching Upstox instrument key: {e}", "error")
                         gsleep(1)
@@ -906,7 +902,8 @@ def run_trading_logic_for_all(trading_parameters, selected_brokers, logger):
                 instrument_key = matched['instrument_key'].iloc[0]
 
             if instrument_key:
-                    push_log(f"✅ Found instrument key  {instrument_key} for {symbol}")
+                stock['instrument_key'] = instrument_key
+                msg = f"✅ Found instrument key {instrument_key} for {symbol}"
             else:
                 msg = f"⚠️ No instrument key found for {symbol}, skipping this stock."
                 active_trades[stock['symbol_value']] = False
