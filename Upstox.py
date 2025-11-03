@@ -144,11 +144,13 @@ def upstox_balance(access_token):
 def upstox_equity_instrument_key(name):
     instruments = pd.read_csv("https://assets.upstox.com/market-quote/instruments/exchange/complete.csv.gz")
     instruments['expiry'] = pd.to_datetime(instruments['expiry'], errors='coerce').dt.date
-    indices = ['Nifty 50', 'Nifty Bank', 'Nifty Fin Service','NIFTY MID SELECT']
+    indices = {"NIFTY": "Nifty 50", "BANKNIFTY": "Nifty Bank", "FINNIFTY": "Nifty Fin Service",
+               "MIDCPNIFTY": "NIFTY MID SELECT"}
     push_log(name)
     if name in indices:
         instrument_type = "INDEX"
         exchange = "NSE_INDEX"
+        name = indices[name]
     else:
         instrument_type = "EQUITY"
         exchange = "NSE_EQ"
