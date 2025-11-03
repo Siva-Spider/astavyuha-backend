@@ -894,6 +894,10 @@ def run_trading_logic_for_all(trading_parameters, selected_brokers, logger):
                             instrument_key = ar.angelone_get_token_by_name(symbol)
                         elif broker_name.lower() == "5paisa":
                             instrument_key = fp.fivepaisa_scripcode_fetch(symbol)
+                            
+                        if instrument_key:
+                            push_log(f"✅ Found instrument key  {instrument_key} for {symbol}")
+                            break
                     except Exception as e:
                         push_log(f"Attempt {attempt+1}/{retries} failed fetching Upstox instrument key: {e}", "error")
                         gsleep(1)
