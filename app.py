@@ -912,7 +912,7 @@ def run_trading_logic_for_all(trading_parameters, selected_brokers, logger):
     now_interval, next_interval = nni.round_to_next_interval(interval)
     msg = f"Present Interval Start : {now_interval}, Next Interval Start :{next_interval}"
     push_log(msg)
-    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = datetime.datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d %H:%M:%S")
     push_log(now)
     # loop until all stocks disconnected
     while any(active_trades.values()):
@@ -922,7 +922,7 @@ def run_trading_logic_for_all(trading_parameters, selected_brokers, logger):
                 print(f"Stock: {symbol} Disconnected - removing from trading_parameters")
                 trading_parameters.remove(stock)
                 continue
-        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        now = datetime.datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d %H:%M:%S")
 
         if now >= next_interval:
             now_interval, next_interval = nni.round_to_next_interval(interval)
