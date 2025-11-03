@@ -95,7 +95,6 @@ def upstox_profile(access_token):
         push_log(f"Status Code: {response.status_code}")
         if response.status_code == 200:
             response_data = response.json()
-            push_log(response_data)
             # Extract available_margin from equity section
             if response_data.get('status') == 'success' and 'data' in response_data:
                 #profile = response_data['data']['equity']['available_margin']
