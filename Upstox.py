@@ -146,12 +146,10 @@ def upstox_equity_instrument_key(name):
     
     instruments = pd.read_csv("https://assets.upstox.com/market-quote/instruments/exchange/complete.csv.gz")
     instruments['expiry'] = pd.to_datetime(instruments['expiry'], errors='coerce').dt.date
-    indices = {"NIFTY": "Nifty 50", "BANKNIFTY": "Nifty Bank", "FINNIFTY": "Nifty Fin Service",
-               "MIDCPNIFTY": "NIFTY MID SELECT"}
+    indices = ["Nifty 50", "Nifty Bank", "Nifty Fin Service","NIFTY MID SELECT"]
     if name in indices:
         instrument_type = "INDEX"
         exchange = "NSE_INDEX"
-        name = indices[name]
     else:
         instrument_type = "EQUITY"
         exchange = "NSE_EQ"
