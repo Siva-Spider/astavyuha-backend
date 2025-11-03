@@ -868,6 +868,10 @@ def run_trading_logic_for_all(trading_parameters, selected_brokers, logger):
         interval = stock.get('interval')
         exchange_type = stock.get('type')
 
+        push_log(symbol)
+        push_log(name)
+        push_log(company)
+
         msg = f"🔑 Fetching instrument key for {company} ({symbol}) via {broker_name}..."
         push_log(msg)
 
