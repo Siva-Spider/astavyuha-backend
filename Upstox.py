@@ -145,7 +145,7 @@ def upstox_equity_instrument_key(name):
     instruments = pd.read_csv("https://assets.upstox.com/market-quote/instruments/exchange/complete.csv.gz")
     instruments['expiry'] = pd.to_datetime(instruments['expiry'], errors='coerce').dt.date
     indices = ['Nifty 50', 'Nifty Bank', 'Nifty Fin Service','NIFTY MID SELECT']
-
+    push_log(name)
     if name in indices:
         instrument_type = "INDEX"
         exchange = "NSE_INDEX"
