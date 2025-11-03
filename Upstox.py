@@ -142,7 +142,6 @@ def upstox_balance(access_token):
         return None
 
 def upstox_equity_instrument_key(name):
-    push_log(name)
     
     instruments = pd.read_csv("https://assets.upstox.com/market-quote/instruments/exchange/complete.csv.gz")
     instruments['expiry'] = pd.to_datetime(instruments['expiry'], errors='coerce').dt.date
