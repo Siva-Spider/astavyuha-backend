@@ -175,6 +175,7 @@ def upstox_fetch_historical_data_with_retry(access_token, instrument_key, interv
     end_date = (today - datetime.timedelta(days=1)).strftime('%Y-%m-%d')
     start = today - datetime.timedelta(days=25)
     start_date = start.strftime('%Y-%m-%d')
+    push_log(instrument_key)
 
     url = f"https://api.upstox.com/v3/historical-candle/{instrument_key}/minutes/{interval}/{end_date}/{start_date}"
     headers = {
