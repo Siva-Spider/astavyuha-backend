@@ -544,7 +544,8 @@ def upstox_equity_option_instrument_key( stock,symbol, spot_value, option_type):
     instruments = pd.read_csv("https://assets.upstox.com/market-quote/instruments/exchange/complete.csv.gz")
     indices = {"NIFTY": "Nifty 50", "BANKNIFTY": "Nifty Bank", "FINNIFTY": "Nifty Fin Service",
                "MIDCPNIFTY": "NIFTY MID SELECT"}
-
+    push_log(stock)
+    push_log(symbol)
     if symbol in indices:
         instrument_type = "OPTIDX"
     else:
