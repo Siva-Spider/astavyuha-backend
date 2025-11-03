@@ -907,7 +907,6 @@ def run_trading_logic_for_all(trading_parameters, selected_brokers, logger):
 
             if instrument_key:
                     push_log(f"✅ Found instrument key  {instrument_key} for {symbol}")
-                    break
             else:
                 msg = f"⚠️ No instrument key found for {symbol}, skipping this stock."
                 active_trades[stock['symbol_value']] = False
