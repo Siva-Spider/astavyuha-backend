@@ -88,7 +88,11 @@ stock_map = {
     "TATA CONSUMER PRODUCT LTD": "TATACONSUM",
     "ADANI ENTERPRISES LIMITED": "ADANIENT",
     "HERO MOTOCORP LIMITED": "HEROMOTOCO",
-    # ... (other original entries)
+    "INDUSIND BANK LIMITED": "INDUSINDBK",
+    "Nifty 50": "NIFTY",
+    "Nifty Bank": "BANKNIFTY",
+    "Nifty Fin Service": "FINNIFTY",
+    "NIFTY MID SELECT": "MIDCPNIFTY",
 }
 
 reverse_stock_map = {v: k for k, v in stock_map.items()}
