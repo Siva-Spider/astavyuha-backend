@@ -972,7 +972,7 @@ def upstox_trade_conditions_check(lots, tgt, indicators_df, credentials, stock,s
         latest_macd = indicators_df['MACD'].iloc[-1]
         latest_macd_signal = indicators_df['MACD'].iloc[-1]
         close_price = float(indicators_df['close'].iloc[-1])
-        print(f"{latest_Ema10}--{latest_Ema20}--{latest_supertrend}--{latest_macd}--{latest_macd_signal}--{close_price}")
+        push_log(f"{latest_Ema10}--{latest_Ema20}--{latest_supertrend}--{latest_macd}--{latest_macd_signal}--{close_price}")
         positions = upstox_fetch_positions(upstox_access_token)
         if positions:
             count = 0
