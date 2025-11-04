@@ -39,7 +39,7 @@ def push_log(message, level="info"):
     entry = {"type": "log", "ts": ts, "message": str(message), "level": level}
 
     with _log_lock:
-        #_log_buf.append(entry)
+        _log_buf.append(entry)
     
     # Write to actual Python logger
     level = level.lower()
