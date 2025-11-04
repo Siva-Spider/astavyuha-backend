@@ -927,7 +927,7 @@ def run_trading_logic_for_all(trading_parameters, selected_brokers, logger):
                 trading_parameters.remove(stock)
                 continue
         now = datetime.datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d %H:%M:%S")
-        push_log(f"Waiting for next candle... Current time: {now}")
+        push_log(f"Waiting for next candle... Current time: {now}", end='\r', flush=True)
         gsleep(0.5)
         if now >= next_interval:
             now_interval, next_interval = nni.round_to_next_interval(interval)
