@@ -35,7 +35,7 @@ _log_lock = threading.Lock()
 
 def push_log(message, level="info"):
     """Add a log message to the in-memory buffer and standard logger."""
-    ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    ts = datetime.datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d %H:%M:%S")
     entry = {"type": "log", "ts": ts, "message": str(message), "level": level}
 
     with _log_lock:
