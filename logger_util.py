@@ -33,14 +33,19 @@ _LOG_MAX = int(os.environ.get("AUTOTRADE_LOG_BUFFER", 500))
 _log_buf = deque(maxlen=_LOG_MAX)
 _log_lock = threading.Lock()
 
-def push_log(message, level="info"):
+def push_log(message, level="info,inline=False"):
     """Add a log message to the in-memory buffer and standard logger."""
     ts = datetime.datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d %H:%M:%S")
     entry = {"type": "log", "ts": ts, "message": str(message), "level": level}
 
     with _log_lock:
         _log_buf.append(entry)
-
+        
+    if inline:
+        print(f"{message}", end='\r', flush=True)
+    else:
+        print(f"{message}")
+    
     # Write to actual Python logger
     level = level.lower()
     if level == "error":
